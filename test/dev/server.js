@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Adobe. All rights reserved.
+ * Copyright 2021 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -9,16 +9,18 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { DevelopmentServer } from '@adobe/helix-deploy';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
 
-/* eslint-env mocha */
+import { main } from '../../src/index.js';
 
-import assert from 'assert';
-import { Request } from '@adobe/helix-universal';
+// eslint-disable-next-line no-underscore-dangle
+global.__rootdir = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 
-import { main } from '../src/index.js';
+async function run() {
+  const devServer = await new DevelopmentServer(main).init();
+  await devServer.start();
+}
 
-describe('Index Tests', () => {
-  it('index function requires client id', async () => {
-    await assert.rejects(main(new Request('https://localhost/'), { log: console, pathInfo: {}, env: {} }), Error('Missing clientId.'));
-  });
-});
+run().then(process.stdout).catch(process.stderr);
