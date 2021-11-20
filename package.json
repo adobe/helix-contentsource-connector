@@ -25,8 +25,12 @@
     "awsRole": "arn:aws:iam::118435662149:role/helix-service-role-s3-rw",
     "testUrl": "/_status_check/healthcheck.json",
     "static": [
+      "views/header.ejs",
+      "views/footer.ejs",
       "views/index.ejs",
-      "views/installed.ejs"
+      "views/connect.ejs",
+      "views/installed.ejs",
+      "views/info.ejs"
     ]
   },
   "mocha": {
@@ -50,10 +54,13 @@
     "@adobe/helix-fetch": "3.0.0",
     "@adobe/helix-onedrive-support": "https://github.com/adobe/helix-onedrive-support.git#msal",
     "@adobe/helix-shared-body-data": "1.1.5",
+    "@adobe/helix-shared-config": "1.5.1",
+    "@adobe/helix-shared-utils": "1.0.4",
     "@adobe/helix-shared-wrap": "1.0.0",
     "@adobe/helix-status": "9.2.4",
     "@adobe/helix-universal": "1.9.0",
     "@adobe/helix-universal-logger": "2.0.0",
+    "@aws-sdk/client-s3": "3.42.0",
     "ejs": "3.1.6"
   },
   "devDependencies": {

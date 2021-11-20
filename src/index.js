@@ -19,6 +19,7 @@ import { logger } from '@adobe/helix-universal-logger';
 import { wrap as status } from '@adobe/helix-status';
 import { Response } from '@adobe/helix-universal';
 import MemCachePlugin from './MemCachePlugin.js';
+import fetchFstab from './fetch-fstab.js';
 
 const AUTH_SCOPES = ['user.read', 'openid', 'profile', 'offline_access'];
 
@@ -29,6 +30,9 @@ async function getPackageJson() {
   }
   return pkgJson;
 }
+
+/* ---- ejs --- */
+ejs.resolveInclude = (name) => resolve('views', `${name}.ejs`);
 
 const templates = {};
 
@@ -49,13 +53,11 @@ async function render(name, data) {
   });
 }
 
-const memCachePlugin = new MemCachePlugin();
-
 /**
  * @param context
  * @returns {OneDrive}
  */
-function getOneDriveClient(context) {
+function getOneDriveClient(context, { owner, repo }) {
   if (!context.od) {
     const { log, env } = context;
     const {
@@ -65,8 +67,8 @@ function getOneDriveClient(context) {
     } = env;
 
     const plugin = process.env.AWS_EXECUTION_ENV
-      ? memCachePlugin
-      : new FSCachePlugin('.auth.json').withLogger(log);
+      ? new MemCachePlugin(`${owner}--${repo}`)
+      : new FSCachePlugin(`.auth-${owner}--${repo}.json`).withLogger(log);
 
     context.od = new OneDrive({
       clientId,
@@ -87,7 +89,7 @@ function getOneDriveClient(context) {
  * @returns {boolean} if requested directly via api gatewat
  */
 function isDirectAWS(req) {
-  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? '';
   return host.endsWith('.amazonaws.com');
 }
 
@@ -99,8 +101,22 @@ function getRedirectRoot(req, ctx) {
 
 function getRedirectUrl(req, ctx, path) {
   const rootPath = getRedirectRoot(req, ctx);
-  const host = /* req.headers.get('x-forwarded-host') || */ req.headers.get('host');
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? '';
   return `${host.startsWith('localhost') ? 'http' : 'https'}://${host}${rootPath}${path}`;
+}
+
+async function getProjectInfo(ctx, owner, repo) {
+  const fstab = await fetchFstab(ctx, {
+    owner,
+    repo,
+    ref: 'main',
+  });
+  return {
+    owner,
+    repo,
+    mp: fstab.mountpoints[0],
+    error: '',
+  };
 }
 
 /**
@@ -110,28 +126,44 @@ function getRedirectUrl(req, ctx, path) {
  * @returns {Response} a response
  */
 async function run(request, context) {
-  const { pathInfo: { suffix }, data } = context;
+  const { log, pathInfo: { suffix }, data } = context;
+  const [, route, owner, repo] = suffix.split('/');
+  if (route === 'token') {
+    const { code, state } = data;
+    const [own, rep] = state.split('/');
+    // todo: validate state
 
-  if (suffix === '/token') {
     const tokenRequest = {
-      code: data.code,
+      code,
       scopes: AUTH_SCOPES,
       redirectUri: getRedirectUrl(request, context, '/token'),
     };
 
-    const od = getOneDriveClient(context);
+    const od = getOneDriveClient(context, { owner: own, repo: rep });
     await od.app.acquireTokenByCode(tokenRequest);
     // todo: show error page
     return new Response('', {
       status: 302,
       headers: {
-        location: `${getRedirectRoot(request, context)}/`,
+        location: `${getRedirectRoot(request, context)}/connect/${own}/${rep}`,
       },
     });
   }
 
-  if (suffix === '/reset') {
-    const od = getOneDriveClient(context);
+  const templateData = {
+    pkgJson: await getPackageJson(),
+    repo,
+    owner,
+    links: {
+      helixHome: 'https://www.hlx.live/',
+      disconnect: getRedirectUrl(request, context, `/disconnect/${owner}/${repo}`),
+      connect: getRedirectUrl(request, context, '/connect'),
+      root: getRedirectUrl(request, context, '/'),
+    },
+  };
+
+  if (route === 'disconnect' && owner && repo) {
+    const od = getOneDriveClient(context, { owner, repo });
     const cache = od.app.getTokenCache();
     await Promise.all((await cache.getAllAccounts())
       .map(async (info) => cache.removeAccount(info)));
@@ -139,33 +171,41 @@ async function run(request, context) {
     return new Response('', {
       status: 302,
       headers: {
-        location: `${getRedirectRoot(request, context)}/`,
+        location: `${getRedirectRoot(request, context)}/connect/${owner}/${repo}`,
       },
     });
   }
 
-  const od = getOneDriveClient(context);
-  const templateData = {
-    pkgJson: await getPackageJson(),
-    links: {
-      helixHome: 'https://www.hlx.live/',
-      reset: getRedirectUrl(request, context, '/reset'),
-    },
-  };
+  if (route === 'connect' && owner && repo) {
+    templateData.info = await getProjectInfo(context, owner, repo);
+    if (templateData.info.mp.type === 'onedrive') {
+      const od = getOneDriveClient(context, { owner, repo });
 
-  // check for token
-  if (await od.getAccessToken(true)) {
-    const me = await od.me();
-    return render('installed', { ...templateData, me });
+      // check for token
+      if (await od.getAccessToken(true)) {
+        const me = await od.me();
+        log.info('installed user', me);
+        return render('installed', { ...templateData, me });
+      }
+
+      const authCodeUrlParameters = {
+        scopes: AUTH_SCOPES,
+        redirectUri: getRedirectUrl(request, context, '/token'),
+        responseMode: 'form_post',
+        prompt: 'consent',
+        state: `${owner}/${repo}`,
+      };
+
+      // get url to sign user in and consent to scopes needed for application
+      templateData.links.odLogin = await od.app.getAuthCodeUrl(authCodeUrlParameters);
+    } else if (templateData.info.mp.type === 'google') {
+      // todo:
+      templateData.linksgdLogin = 'about:blank';
+    }
+
+    return render('connect', templateData);
   }
 
-  const authCodeUrlParameters = {
-    scopes: AUTH_SCOPES,
-    redirectUri: getRedirectUrl(request, context, '/token'),
-  };
-
-  // get url to sign user in and consent to scopes needed for application
-  templateData.links.odLogin = await od.app.getAuthCodeUrl(authCodeUrlParameters);
   return render('index', templateData);
 }
 

@@ -10,15 +10,20 @@
  * governing permissions and limitations under the License.
  */
 
+const caches = {};
 /**
  * Cache plugin for MSAL
  * @class MemCachePlugin
  * @implements ICachePlugin
  */
 export default class MemCachePlugin {
+  constructor(key) {
+    this.key = key;
+  }
+
   async beforeCacheAccess(cacheContext) {
-    const { cache } = this;
     try {
+      const cache = caches[this.key];
       if (cache) {
         cacheContext.tokenCache.deserialize(cache);
       }
@@ -30,7 +35,7 @@ export default class MemCachePlugin {
 
   async afterCacheAccess(cacheContext) {
     if (cacheContext.cacheHasChanged) {
-      this.cache = cacheContext.tokenCache.serialize();
+      caches[this.key] = cacheContext.tokenCache.serialize();
     }
   }
 }

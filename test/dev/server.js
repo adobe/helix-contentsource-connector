@@ -19,7 +19,9 @@ import { main } from '../../src/index.js';
 global.__rootdir = resolve(fileURLToPath(import.meta.url), '..', '..', '..');
 
 async function run() {
-  const devServer = await new DevelopmentServer(main).init();
+  const devServer = await new DevelopmentServer(main)
+    .withXFH('localhost:{port}')
+    .init();
   await devServer.start();
 }
 

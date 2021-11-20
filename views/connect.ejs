@@ -1,0 +1,21 @@
+<%- include('/header'); -%>
+<%- include('/info'); -%>
+<p>
+    <% switch (info.mp.type) {
+        case 'onedrive':
+            %><a href="<%= links.odLogin ;%>">Connect to Sharepoint / Onedrive</a>.<%
+            break;
+        case 'google':
+            %><a href="<%= links.gdLogin ;%>">Connect to Google (unsupported)</a>.<%
+            break;
+        default:
+            %>invalid mountpoint type<%
+            break;
+    } %>
+</p>
+<p>
+    <a href="<%= links.root %>">start over</a>
+</p>
+<%- include('/footer'); -%>
+
+
