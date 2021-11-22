@@ -145,7 +145,7 @@ describe('Index Tests (google)', () => {
     // console.log(body);
     assert.match(body, /<a href="http:\/\/localhost:3000\/">start over<\/a>/);
     assert.match(body, /content: <a href="https:\/\/drive.google.com\/drive\/u\/2\/folders\/1vjng4ahZWph-9oeaMae16P9Kbb3xg4Cg">https:\/\/drive.google.com\/drive\/u\/2\/folders\/1vjng4ahZWph-9oeaMae16P9Kbb3xg4Cg<\/a>/);
-    assert.match(body, /<a href="">Connect to Google \(unsupported\)<\/a>/);
+    assert.match(body, /<a href="about:blank">Connect to Google \(unsupported\)<\/a>/);
   });
 });
 
@@ -164,7 +164,7 @@ describe('Index Tests (sharepoint)', () => {
     const resp = await main(new Request('https://localhost/'), DEFAULT_CONTEXT('/connect/owner/repo'));
     assert.strictEqual(resp.status, 200);
     const body = await resp.text();
-    console.log(body);
+    // console.log(body);
     assert.match(body, /Enter github url/);
     assert.match(body, /<p class="error">Missing clientId\.<\/p>/);
   });
@@ -190,7 +190,7 @@ describe('Index Tests (sharepoint)', () => {
   });
 
   it('sharepoint token endpoint can receive token', async () => {
-    // nock.fstab(FSTAB_GD, 'owner', 'repo', 'main');
+    nock.fstab(FSTAB_GD, 'owner', 'repo', 'main');
     nock('https://login.microsoftonline.com')
       .get('/common/discovery/instance?api-version=1.1&authorization_endpoint=https://login.windows.net/fa7b1b5a-7b34-4387-94ae-d2c178decee1/oauth2/v2.0/authorize')
       .reply(200, RESP_AUTH_DISCOVERY)

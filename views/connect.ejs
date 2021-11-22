@@ -2,7 +2,7 @@
 <%- include('/info'); -%>
 <%- include('/error'); -%>
 <p>
-    <% switch (info.mp.type) {
+    <% switch (mp.type) {
         case 'onedrive':
             %><a href="<%= links.odLogin ;%>">Connect to Sharepoint / Onedrive</a>.<%
             break;
