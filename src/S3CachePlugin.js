@@ -55,7 +55,7 @@ export default class S3CachePlugin {
           Bucket: 'helix-content-bus',
           Key: this.key,
           Body: cacheContext.tokenCache.serialize(),
-          ContentType: 'application/json',
+          ContentType: 'text/plain',
         }));
         return true;
       } catch (e) {
