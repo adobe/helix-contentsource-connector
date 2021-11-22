@@ -20,16 +20,9 @@ import { wrap as status } from '@adobe/helix-status';
 import { Response } from '@adobe/helix-universal';
 import MemCachePlugin from './MemCachePlugin.js';
 import fetchFstab from './fetch-fstab.js';
+import pkgJson from './package.cjs';
 
 const AUTH_SCOPES = ['user.read', 'openid', 'profile', 'offline_access'];
-
-let pkgJson;
-async function getPackageJson() {
-  if (!pkgJson) {
-    pkgJson = JSON.parse(await readFile('package.json', 'utf-8'));
-  }
-  return pkgJson;
-}
 
 /* ---- ejs --- */
 ejs.resolveInclude = (name) => resolve('views', `${name}.ejs`);
@@ -130,6 +123,7 @@ async function run(request, context) {
   const [, route, owner, repo] = suffix.split('/');
   if (route === 'token') {
     const { code, state } = data;
+    console.log(data);
     const [own, rep] = state.split('/');
     // todo: validate state
 
@@ -151,7 +145,8 @@ async function run(request, context) {
   }
 
   const templateData = {
-    pkgJson: await getPackageJson(),
+    error: '',
+    pkgJson,
     repo,
     owner,
     links: {
@@ -176,34 +171,43 @@ async function run(request, context) {
     });
   }
 
-  if (route === 'connect' && owner && repo) {
-    templateData.info = await getProjectInfo(context, owner, repo);
-    if (templateData.info.mp.type === 'onedrive') {
-      const od = getOneDriveClient(context, { owner, repo });
+  try {
+    if (route === 'connect' && owner && repo) {
+      templateData.info = await getProjectInfo(context, owner, repo);
+      if (templateData.info.mp.type === 'onedrive') {
+        const od = getOneDriveClient(context, {
+          owner,
+          repo,
+        });
 
-      // check for token
-      if (await od.getAccessToken(true)) {
-        const me = await od.me();
-        log.info('installed user', me);
-        return render('installed', { ...templateData, me });
+        // check for token
+        const token = await od.getAccessToken(true);
+        console.log(token);
+        if (token) {
+          const me = await od.me();
+          log.info('installed user', me);
+          return render('installed', { ...templateData, me });
+        }
+
+        const authCodeUrlParameters = {
+          scopes: AUTH_SCOPES,
+          redirectUri: getRedirectUrl(request, context, '/token'),
+          responseMode: 'form_post',
+          prompt: 'consent',
+          state: `${owner}/${repo}`,
+        };
+
+        // get url to sign user in and consent to scopes needed for application
+        templateData.links.odLogin = await od.app.getAuthCodeUrl(authCodeUrlParameters);
+      } else if (templateData.info.mp.type === 'google') {
+        // todo:
+        templateData.linksgdLogin = 'about:blank';
       }
 
-      const authCodeUrlParameters = {
-        scopes: AUTH_SCOPES,
-        redirectUri: getRedirectUrl(request, context, '/token'),
-        responseMode: 'form_post',
-        prompt: 'consent',
-        state: `${owner}/${repo}`,
-      };
-
-      // get url to sign user in and consent to scopes needed for application
-      templateData.links.odLogin = await od.app.getAuthCodeUrl(authCodeUrlParameters);
-    } else if (templateData.info.mp.type === 'google') {
-      // todo:
-      templateData.linksgdLogin = 'about:blank';
+      return render('connect', templateData);
     }
-
-    return render('connect', templateData);
+  } catch (e) {
+    templateData.error = e.message;
   }
 
   return render('index', templateData);

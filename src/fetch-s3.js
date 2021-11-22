@@ -10,7 +10,6 @@
  * governing permissions and limitations under the License.
  */
 import { promisify } from 'util';
-
 import zlib from 'zlib';
 import { Response } from '@adobe/helix-universal';
 

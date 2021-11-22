@@ -11,11 +11,8 @@
  */
 
 /* eslint-disable max-classes-per-file, class-methods-use-this */
-import { createRequire } from 'module';
 import { config } from 'dotenv';
-
-const require = createRequire(import.meta.url);
-const packjson = require('../package.json');
+import packjson from '../src/package.cjs';
 
 config();
 

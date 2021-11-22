@@ -30,6 +30,7 @@
       "views/index.ejs",
       "views/connect.ejs",
       "views/installed.ejs",
+      "views/error.ejs",
       "views/info.ejs"
     ]
   },

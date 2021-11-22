@@ -1,7 +1,9 @@
 <%- include('/header'); -%>
+<%- include('/error'); -%>
 <form action="<%= links.connect %>" onsubmit="return post()" id="form">
     <p>
         Enter github url: <input name="github" type="url" size="60">
+        <button type="submit">ok</button>
     </p>
 </form>
 <script>

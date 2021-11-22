@@ -9,11 +9,11 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import { context, timeoutSignal } from '@adobe/helix-fetch';
+import { context, timeoutSignal, h1 } from '@adobe/helix-fetch';
 
 /* istanbul ignore next */
 export const { fetch } = process.env.HELIX_FETCH_FORCE_HTTP1
-  /* istanbul ignore next */ ? context.h1()
+  /* istanbul ignore next */ ? h1()
   /* istanbul ignore next */ : context();
 
 /**
