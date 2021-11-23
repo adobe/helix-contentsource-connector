@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-const caches = {};
+let caches = {};
 
 /**
  * Cache plugin for MSAL
@@ -24,20 +24,25 @@ export default class MemCachePlugin {
     this.base = base;
   }
 
+  static clear() {
+    caches = {};
+  }
+
   async beforeCacheAccess(cacheContext) {
     try {
-      this.log.info('mem: >>> read token cache', this.key);
+      this.log.info('mem: read token cache', this.key);
       const cache = caches[this.key];
       if (cache) {
         cacheContext.tokenCache.deserialize(cache);
         return true;
       } else if (this.base) {
-        this.log.info('mem: >>> read token cache failed. asking base');
+        this.log.info('mem: read token cache failed. asking base');
         const ret = await this.base.beforeCacheAccess(cacheContext);
         if (ret) {
-          this.log.info('mem: >>> base updated. remember.');
+          this.log.info('mem: base updated. remember.');
           caches[this.key] = cacheContext.tokenCache.serialize();
         }
+        return ret;
       }
     } catch (e) {
       this.log.warn('mem: unable to deserialize token cache.', e);
@@ -47,10 +52,10 @@ export default class MemCachePlugin {
 
   async afterCacheAccess(cacheContext) {
     if (cacheContext.cacheHasChanged) {
-      this.log.info('mem: >>> write token cache', this.key);
+      this.log.info('mem: write token cache', this.key);
       caches[this.key] = cacheContext.tokenCache.serialize();
       if (this.base) {
-        this.log.info('mem: >>> write token cache done. telling base', this.key);
+        this.log.info('mem: write token cache done. telling base', this.key);
         return this.base.afterCacheAccess(cacheContext);
       }
       return true;

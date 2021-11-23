@@ -62,9 +62,9 @@ function getOneDriveClient(context, opts) {
       AZURE_WORD2MD_TENANT: tenant = 'fa7b1b5a-7b34-4387-94ae-d2c178decee1',
     } = env;
 
-    const key = `${contentBusId}/.helix-auth.txt`;
+    const key = `${contentBusId}/.helix-auth`;
     const base = process.env.AWS_EXECUTION_ENV
-      ? new S3CachePlugin(context, { key })
+      ? new S3CachePlugin(context, { key, secret: contentBusId })
       : new FSCachePlugin(`.auth-${contentBusId}--${owner}--${repo}.json`).withLogger(log);
     const plugin = new MemCachePlugin(context, { key, base });
 

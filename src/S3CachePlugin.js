@@ -9,7 +9,9 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import { Response } from '@adobe/helix-universal';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { encrypt, decrypt } from './encrypt.js';
 
 /**
  * Cache plugin for MSAL
@@ -17,10 +19,11 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
  * @implements ICachePlugin
  */
 export default class S3CachePlugin {
-  constructor(context, { key }) {
+  constructor(context, { key, secret }) {
     const { log, env } = context;
     this.log = log;
     this.key = key;
+    this.secret = secret;
     const opts = !env.AWS_S3_ACCESS_KEY_ID ? {} : {
       region: env.AWS_S3_REGION,
       credentials: {
@@ -32,35 +35,48 @@ export default class S3CachePlugin {
   }
 
   async beforeCacheAccess(cacheContext) {
+    const { log, secret, key } = this;
     try {
-      this.log.info('s3: >>> read token cache', this.key);
+      log.info('s3: read token cache', key);
       const res = await this.s3.send(new GetObjectCommand({
         Bucket: 'helix-content-bus',
-        Key: this.key,
+        Key: key,
       }));
-      cacheContext.tokenCache.deserialize(res.Body);
+      let data = await new Response(res.Body, {}).buffer();
+      if (secret) {
+        data = decrypt(secret, data).toString('utf-8');
+      }
+      cacheContext.tokenCache.deserialize(data);
       return true;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      this.log.warn('s3: unable to deserialize token cache', e);
+      if (e.$metadata?.httpStatusCode === 404) {
+        log.info('s3: unable to deserialize token cache: not found');
+      } else {
+        log.warn('s3: unable to deserialize token cache', e);
+      }
     }
     return false;
   }
 
   async afterCacheAccess(cacheContext) {
     if (cacheContext.cacheHasChanged) {
+      const { log, secret, key } = this;
       try {
-        this.log.info('s3: >>> write token cache', this.key);
+        log.info('s3: write token cache', key);
+        let data = cacheContext.tokenCache.serialize();
+        if (secret) {
+          data = encrypt(secret, Buffer.from(data, 'utf-8'));
+        }
         await this.s3.send(new PutObjectCommand({
           Bucket: 'helix-content-bus',
-          Key: this.key,
-          Body: cacheContext.tokenCache.serialize(),
-          ContentType: 'text/plain',
+          Key: key,
+          Body: data,
+          ContentType: secret ? 'application/octet-stream' : 'text/plain',
         }));
         return true;
       } catch (e) {
         // eslint-disable-next-line no-console
-        this.log.warn('s3: unable to serialize token cache', e);
+        log.warn('s3: unable to serialize token cache', e);
       }
     }
     return false;

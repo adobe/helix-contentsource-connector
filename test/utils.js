@@ -44,7 +44,11 @@ export function Nock() {
   nocker.done = () => {
     if (unmatched) {
       nock.emitter.off('no match', noMatchHandler);
-      assert.deepStrictEqual(unmatched.map((req) => `${req.method} ${req.host}${req.path}`), []);
+      assert.deepStrictEqual(unmatched.map((req) => {
+        // eslint-disable-next-line no-param-reassign
+        req = req.options || req;
+        return `${req.method} https://${req.hostname}${req.path}`;
+      }), []);
     }
     Object.values(scopes).forEach((s) => s.done());
   };
@@ -58,4 +62,19 @@ export function Nock() {
     .reply(200, auth);
 
   return nocker;
+}
+
+export function filterProperties(obj, names) {
+  return Object.entries(obj).reduce((prev, [key, value]) => {
+    if (names.indexOf(key) >= 0) {
+      // ignore
+    } else if (typeof value === 'object') {
+      // eslint-disable-next-line no-param-reassign
+      prev[key] = filterProperties(value, names);
+    } else {
+      // eslint-disable-next-line no-param-reassign
+      prev[key] = value;
+    }
+    return prev;
+  }, {});
 }

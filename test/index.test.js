@@ -15,8 +15,10 @@
 import assert from 'assert';
 import { encode } from 'querystring';
 import { Request } from '@adobe/helix-universal';
-import { Nock } from './utils.js';
-
+import { Nock, filterProperties } from './utils.js';
+import { decrypt, encrypt } from '../src/encrypt.js';
+import MemCachePlugin from '../src/MemCachePlugin.js';
+import testAuth from './fixtures/test-auth.js';
 import { main } from '../src/index.js';
 
 const FSTAB_1D = `
@@ -153,10 +155,13 @@ describe('Index Tests (sharepoint)', () => {
   let nock;
   beforeEach(() => {
     nock = new Nock();
+    process.env.AWS_EXECUTION_ENV = 'aws-foo';
   });
 
   afterEach(() => {
     nock.done();
+    delete process.env.AWS_EXECUTION_ENV;
+    MemCachePlugin.clear();
   });
 
   it('sharepoint github requires client id', async () => {
@@ -176,6 +181,9 @@ describe('Index Tests (sharepoint)', () => {
       .reply(200, RESP_AUTH_DISCOVERY)
       .get('/fa7b1b5a-7b34-4387-94ae-d2c178decee1/v2.0/.well-known/openid-configuration')
       .reply(200, RESP_AUTH_WELL_KNOWN);
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d/.helix-auth?x-id=GetObject')
+      .reply(404);
 
     const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/connect/owner/repo', {
       AZURE_WORD2MD_CLIENT_ID: 'client-id',
@@ -190,7 +198,8 @@ describe('Index Tests (sharepoint)', () => {
   });
 
   it('sharepoint token endpoint can receive token', async () => {
-    nock.fstab(FSTAB_GD, 'owner', 'repo', 'main');
+    let cache;
+    nock.fstab(FSTAB_1D, 'owner', 'repo', 'main');
     nock('https://login.microsoftonline.com')
       .get('/common/discovery/instance?api-version=1.1&authorization_endpoint=https://login.windows.net/fa7b1b5a-7b34-4387-94ae-d2c178decee1/oauth2/v2.0/authorize')
       .reply(200, RESP_AUTH_DISCOVERY)
@@ -198,6 +207,14 @@ describe('Index Tests (sharepoint)', () => {
       .reply(200, RESP_AUTH_WELL_KNOWN)
       .post('/fa7b1b5a-7b34-4387-94ae-d2c178decee1/oauth2/v2.0/token')
       .reply(200, RESP_AUTH_DEFAULT);
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d/.helix-auth?x-id=GetObject')
+      .reply(404)
+      .put('/9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d/.helix-auth?x-id=PutObject')
+      .reply((uri, body) => {
+        cache = Buffer.from(body, 'hex');
+        return [201];
+      });
 
     const resp = await main(DEFAULT_REQUEST({
       method: 'POST',
@@ -219,5 +236,73 @@ describe('Index Tests (sharepoint)', () => {
       'content-type': 'text/plain; charset=utf-8',
       location: '/connect/owner/repo',
     });
+
+    const data = decrypt('9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d', cache).toString('utf-8');
+    const json = filterProperties(JSON.parse(data), ['expires_on', 'extended_expires_on', 'cached_at']);
+    assert.deepStrictEqual(json, {
+      AccessToken: {
+        '-login.windows.net-accesstoken-client-id-fa7b1b5a-7b34-4387-94ae-d2c178decee1-user.read openid profile offline_access': {
+          client_id: 'client-id',
+          credential_type: 'AccessToken',
+          environment: 'login.windows.net',
+          home_account_id: '',
+          realm: 'fa7b1b5a-7b34-4387-94ae-d2c178decee1',
+          secret: 'dummy',
+          target: 'user.read openid profile offline_access',
+          token_type: 'Bearer',
+        },
+      },
+      Account: {},
+      AppMetadata: {},
+      IdToken: {},
+      RefreshToken: {
+        '-login.windows.net-refreshtoken-client-id--': {
+          client_id: 'client-id',
+          credential_type: 'RefreshToken',
+          environment: 'login.windows.net',
+          home_account_id: '',
+          secret: 'dummy',
+        },
+      },
+    });
+  });
+
+  it('sharepoint mountpoint renders connected', async () => {
+    const authData = encrypt(
+      '9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d',
+      Buffer.from(JSON.stringify(testAuth()), 'utf-8'),
+    );
+
+    nock.fstab(FSTAB_1D, 'owner', 'repo', 'main');
+    nock('https://login.microsoftonline.com')
+      .get('/common/discovery/instance?api-version=1.1&authorization_endpoint=https://login.windows.net/fa7b1b5a-7b34-4387-94ae-d2c178decee1/oauth2/v2.0/authorize')
+      .times(3)
+      .optionally()
+      .reply(200, RESP_AUTH_DISCOVERY)
+      .get('/fa7b1b5a-7b34-4387-94ae-d2c178decee1/v2.0/.well-known/openid-configuration')
+      .times(3)
+      .optionally()
+      .reply(200, RESP_AUTH_WELL_KNOWN);
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d/.helix-auth?x-id=GetObject')
+      .reply(200, authData, {
+        'content-type': 'application/octet-stream',
+      });
+    nock('https://graph.microsoft.com')
+      .get('/v1.0/me')
+      .reply(200, {
+        displayName: 'Helix Integration',
+        mail: 'helix@adobe.com',
+      });
+
+    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/connect/owner/repo', {
+      AZURE_WORD2MD_CLIENT_ID: '83ab2922-5f11-4e4d-96f3-d1e0ff152856',
+      AZURE_WORD2MD_CLIENT_SECRET: 'client-secret',
+    }));
+    assert.strictEqual(resp.status, 200);
+    const body = await resp.text();
+    assert.match(body, /<a href="http:\/\/localhost:3000\/">start over<\/a>/);
+    assert.match(body, /content: <a href="https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog">https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog<\/a>/);
+    assert.match(body, /Connected user <strong>Helix Integration &lt;<a href="mailto:helix@adobe.com">helix@adobe.com<\/a>&gt;<\/strong>/);
   });
 });
