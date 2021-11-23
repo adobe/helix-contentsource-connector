@@ -132,22 +132,28 @@ describe('Index Tests (google)', () => {
   let nock;
   beforeEach(() => {
     nock = new Nock();
+    process.env.AWS_EXECUTION_ENV = 'aws-foo';
   });
 
   afterEach(() => {
     nock.done();
+    delete process.env.AWS_EXECUTION_ENV;
+    MemCachePlugin.clear();
   });
 
   it('google mountpoint renders link', async () => {
     nock.fstab(FSTAB_GD, 'owner', 'repo', 'main');
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=GetObject')
+      .reply(404);
 
     const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/connect/owner/repo', {}));
     assert.strictEqual(resp.status, 200);
     const body = await resp.text();
-    // console.log(body);
+    console.log(body);
     assert.match(body, /<a href="http:\/\/localhost:3000\/">start over<\/a>/);
     assert.match(body, /content: <a href="https:\/\/drive.google.com\/drive\/u\/2\/folders\/1vjng4ahZWph-9oeaMae16P9Kbb3xg4Cg">https:\/\/drive.google.com\/drive\/u\/2\/folders\/1vjng4ahZWph-9oeaMae16P9Kbb3xg4Cg<\/a>/);
-    assert.match(body, /<a href="about:blank">Connect to Google \(unsupported\)<\/a>/);
+    assert.match(body, /<a href="https:\/\/accounts.google.com\/o\/oauth2\/v2\/auth\?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fspreadsheets%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdocuments&amp;access_type=offline&amp;prompt=consent&amp;state=g%2Fowner%2Frepo&amp;response_type=code&amp;client_id=&amp;redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken">Connect to Google<\/a>/);
   });
 });
 
@@ -194,7 +200,7 @@ describe('Index Tests (sharepoint)', () => {
     // console.log(body);
     assert.match(body, /<a href="http:\/\/localhost:3000\/">start over<\/a>/);
     assert.match(body, /content: <a href="https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog">https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog<\/a>/);
-    assert.match(body, /<a href="https:\/\/login\.microsoftonline\.com\/fa7b1b5a-7b34-4387-94ae-d2c178decee1\/oauth2\/v2\.0\/authorize\?client_id=client-id&amp;scope=user\.read%20openid%20profile%20offline_access&amp;redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken&amp;client-request-id=[0-9a-f-]+&amp;response_mode=form_post&amp;response_type=code&amp;x-client-SKU=msal\.js\.node&amp;x-client-VER=1\.3\.3&amp;x-client-OS=[^&]+&amp;x-client-CPU=[^&]+&amp;client_info=1&amp;prompt=consent&amp;state=owner%2Frepo">Connect to Sharepoint \/ Onedrive<\/a>/);
+    assert.match(body, /<a href="https:\/\/login\.microsoftonline\.com\/fa7b1b5a-7b34-4387-94ae-d2c178decee1\/oauth2\/v2\.0\/authorize\?client_id=client-id&amp;scope=user\.read%20openid%20profile%20offline_access&amp;redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken&amp;client-request-id=[0-9a-f-]+&amp;response_mode=form_post&amp;response_type=code&amp;x-client-SKU=msal\.js\.node&amp;x-client-VER=1\.3\.3&amp;x-client-OS=[^&]+&amp;x-client-CPU=[^&]+&amp;client_info=1&amp;prompt=consent&amp;state=a%2Fowner%2Frepo">Connect to Sharepoint \/ Onedrive<\/a>/);
   });
 
   it('sharepoint token endpoint can receive token', async () => {
@@ -221,7 +227,7 @@ describe('Index Tests (sharepoint)', () => {
       body: encode({
         code: '123',
         client_info: '123',
-        state: 'owner/repo',
+        state: 'a/owner/repo',
       }),
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
