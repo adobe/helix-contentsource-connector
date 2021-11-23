@@ -122,8 +122,8 @@ async function getOAuthClient(req, context, opts) {
     const { log, env } = context;
     const { owner, repo, contentBusId } = opts;
     const client = new google.auth.OAuth2(
-      env.GOOGLE_DOCS2MD_CLIENT_ID,
-      env.GOOGLE_DOCS2MD_CLIENT_SECRET,
+      env.GOOGLE_HELIX_CLIENT_ID,
+      env.GOOGLE_HELIX_CLIENT_SECRET,
       getRedirectUrl(req, context, '/token'),
     );
 
