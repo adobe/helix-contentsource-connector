@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 import ejs from 'ejs';
+import mime from 'mime';
 import { FSCachePlugin, OneDrive } from '@adobe/helix-onedrive-support';
 import { google } from 'googleapis';
 import wrap from '@adobe/helix-shared-wrap';
@@ -152,6 +153,7 @@ async function getOAuthClient(req, context, opts) {
 async function getProjectInfo(request, ctx, { owner, repo }) {
   let mp;
   let contentBusId;
+  let githubUrl = '';
   let error = '';
 
   if (owner && repo) {
@@ -168,6 +170,7 @@ async function getProjectInfo(request, ctx, { owner, repo }) {
         .update(mp.url)
         .digest('hex');
       contentBusId = `${sha256.substr(0, 59)}`;
+      githubUrl = `https://github.com/${owner}/${repo}`;
     } catch (e) {
       ctx.log.error('error fetching fstab:', e);
       error = e.message;
@@ -179,15 +182,30 @@ async function getProjectInfo(request, ctx, { owner, repo }) {
     repo,
     mp,
     contentBusId,
+    githubUrl,
     error,
-    pkgJson,
+    version: pkgJson.version,
     links: {
       helixHome: 'https://www.hlx.live/',
-      disconnect: getRedirectUrl(request, ctx, `/disconnect/${owner}/${repo}`),
+      disconnect: getRedirectUrl(request, ctx, '/disconnect'),
       connect: getRedirectUrl(request, ctx, '/connect'),
+      info: getRedirectUrl(request, ctx, '/info'),
       root: getRedirectUrl(request, ctx, '/'),
+      scripts: getRedirectUrl(request, ctx, '/scripts.js'),
+      styles: getRedirectUrl(request, ctx, '/styles.css'),
     },
   };
+}
+
+async function serveStatic(request, context) {
+  const { pathInfo: { suffix } } = context;
+  const data = await readFile(resolve('views', `.${suffix}`));
+  return new Response(data, {
+    headers: {
+      'content-type': mime.getType(suffix),
+      'cache-control': 'no-cache, private',
+    },
+  });
 }
 
 /**
@@ -198,6 +216,11 @@ async function getProjectInfo(request, ctx, { owner, repo }) {
  */
 async function run(request, context) {
   const { log, pathInfo: { suffix }, data } = context;
+  // poor mans static handling
+  if (suffix === '/scripts.js' || suffix === '/styles.css') {
+    return serveStatic(request, context);
+  }
+
   const [, route, owner, repo] = suffix.split('/');
 
   /* ------------ token ------------------ */
@@ -242,6 +265,11 @@ async function run(request, context) {
 
   /* ------------ disconnect ------------------ */
   if (route === 'disconnect' && owner && repo) {
+    if (request.method === 'GET') {
+      return new Response('', {
+        status: 405,
+      });
+    }
     const info = await getProjectInfo(request, context, {
       owner,
       repo,
@@ -259,21 +287,23 @@ async function run(request, context) {
         }
 
         return new Response('', {
-          status: 302,
-          headers: {
-            location: `${getRedirectRoot(request, context)}/connect/${owner}/${repo}`,
-          },
+          status: 200,
         });
       } catch (e) {
         log.error('error clearing token', e);
         info.error = `error clearing token: ${e.message}`;
       }
     }
-    return render('index', info);
+    return new Response(JSON.stringify(info), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-cache, private',
+      },
+    });
   }
 
-  /* ------------ connect ------------------ */
-  if (route === 'connect' && owner && repo) {
+  /* ------------ info ------------------ */
+  if (route === 'info' && owner && repo) {
     const info = await getProjectInfo(request, context, {
       owner,
       repo,
@@ -287,53 +317,54 @@ async function run(request, context) {
           if (await od.getAccessToken(true)) {
             const me = await od.me();
             log.info('installed user', me);
-            return render('installed', {
-              ...info,
-              me,
+            info.me = me;
+          } else {
+            // get url to sign user in and consent to scopes needed for application
+            info.links.odLogin = await od.app.getAuthCodeUrl({
+              scopes: AZURE_SCOPES,
+              redirectUri: getRedirectUrl(request, context, '/token'),
+              responseMode: 'form_post',
+              prompt: 'consent',
+              state: `a/${owner}/${repo}`,
             });
           }
-
-          // get url to sign user in and consent to scopes needed for application
-          info.links.odLogin = await od.app.getAuthCodeUrl({
-            scopes: AZURE_SCOPES,
-            redirectUri: getRedirectUrl(request, context, '/token'),
-            responseMode: 'form_post',
-            prompt: 'consent',
-            state: `a/${owner}/${repo}`,
-          });
         } else if (info.mp.type === 'google') {
           const oauth2Client = await getOAuthClient(request, context, info);
           try {
             const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-            const { data: { email: mail } } = await oauth2.userinfo.get();
-            const me = {
+            const userInfo = await oauth2.userinfo.get();
+            // console.log(userInfo);
+            const { data: { email: mail, id } } = userInfo;
+            info.me = {
               displayName: '',
               mail,
+              id,
             };
-            log.info('installed user', me);
-            return render('installed', {
-              ...info,
-              me,
-            });
+            log.info('installed user', info.me);
           } catch (e) {
             // ignore
             log.info(`error reading user profile: ${e.message}`);
           }
-
-          info.links.gdLogin = oauth2Client.generateAuthUrl({
-            scope: GOOGLE_SCOPES,
-            access_type: 'offline',
-            prompt: 'consent',
-            state: `g/${owner}/${repo}`,
-          });
+          if (!info.me) {
+            info.links.gdLogin = oauth2Client.generateAuthUrl({
+              scope: GOOGLE_SCOPES,
+              access_type: 'offline',
+              prompt: 'consent',
+              state: `g/${owner}/${repo}`,
+            });
+          }
         }
-        return render('connect', info);
       } catch (e) {
-        log.error('error during connect', e);
+        log.error('error during info', e);
         info.error = e.message;
       }
     }
-    return render('index', info);
+    return new Response(JSON.stringify(info), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-cache, private',
+      },
+    });
   }
 
   const info = await getProjectInfo(request, context, {});

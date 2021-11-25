@@ -13,12 +13,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Helix Setup v<%= pkgJson.version ;%></title>
-    <style>
-        .error {
-            color: red;
-        }
-    </style>
+    <title>Helix Setup v<%= version ;%></title>
+    <link rel="stylesheet" href="<%= links.styles %>" />
+    <script src="<%= links.scripts %>" type="module" crossorigin="use-credentials"></script>
 </head>
 <body>
 <h1>Helix Setup App</h1>
