@@ -117,14 +117,13 @@ describe('Index Tests', () => {
       .get('/owner/repo/main/fstab.yaml')
       .reply(404);
 
-    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/connect/owner/repo', {
+    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/info/owner/repo', {
       AZURE_WORD2MD_CLIENT_ID: 'client-id',
       AZURE_WORD2MD_CLIENT_SECRET: 'client-secret',
     }));
     assert.strictEqual(resp.status, 200);
-    const body = await resp.text();
-    assert.match(body, /Enter github url/);
-    assert.match(body, /<p class="error">no fstab for owner\/repo\/main\/fstab\.yaml<\/p>/);
+    const body = await resp.json();
+    assert.deepStrictEqual(body.error, 'no fstab for owner/repo/main/fstab.yaml');
   });
 });
 
@@ -147,13 +146,10 @@ describe('Index Tests (google)', () => {
       .get('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=GetObject')
       .reply(404);
 
-    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/connect/owner/repo', {}));
+    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/info/owner/repo', {}));
     assert.strictEqual(resp.status, 200);
-    const body = await resp.text();
-    console.log(body);
-    assert.match(body, /<a href="http:\/\/localhost:3000\/">start over<\/a>/);
-    assert.match(body, /content: <a href="https:\/\/drive.google.com\/drive\/u\/2\/folders\/1vjng4ahZWph-9oeaMae16P9Kbb3xg4Cg">https:\/\/drive.google.com\/drive\/u\/2\/folders\/1vjng4ahZWph-9oeaMae16P9Kbb3xg4Cg<\/a>/);
-    assert.match(body, /<a href="https:\/\/accounts.google.com\/o\/oauth2\/v2\/auth\?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fspreadsheets%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdocuments&amp;access_type=offline&amp;prompt=consent&amp;state=g%2Fowner%2Frepo&amp;response_type=code&amp;client_id=&amp;redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken">Connect to Google<\/a>/);
+    const body = await resp.json();
+    assert.strictEqual(body.links.gdLogin, 'https://accounts.google.com/o/oauth2/v2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fspreadsheets%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdocuments&access_type=offline&prompt=consent&state=g%2Fowner%2Frepo&response_type=code&client_id=&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken');
   });
 });
 
@@ -172,12 +168,10 @@ describe('Index Tests (sharepoint)', () => {
 
   it('sharepoint github requires client id', async () => {
     nock.fstab(FSTAB_1D, 'owner', 'repo', 'main');
-    const resp = await main(new Request('https://localhost/'), DEFAULT_CONTEXT('/connect/owner/repo'));
+    const resp = await main(new Request('https://localhost/'), DEFAULT_CONTEXT('/info/owner/repo'));
     assert.strictEqual(resp.status, 200);
-    const body = await resp.text();
-    // console.log(body);
-    assert.match(body, /Enter github url/);
-    assert.match(body, /<p class="error">Missing clientId\.<\/p>/);
+    const body = await resp.json();
+    assert.strictEqual(body.error, 'Missing clientId.');
   });
 
   it('sharepoint mountpoint renders link', async () => {
@@ -191,16 +185,15 @@ describe('Index Tests (sharepoint)', () => {
       .get('/9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d/.helix-auth?x-id=GetObject')
       .reply(404);
 
-    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/connect/owner/repo', {
+    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/info/owner/repo', {
       AZURE_WORD2MD_CLIENT_ID: 'client-id',
       AZURE_WORD2MD_CLIENT_SECRET: 'client-secret',
     }));
     assert.strictEqual(resp.status, 200);
-    const body = await resp.text();
+    const body = await resp.json();
     // console.log(body);
-    assert.match(body, /<a href="http:\/\/localhost:3000\/">start over<\/a>/);
-    assert.match(body, /content: <a href="https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog">https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog<\/a>/);
-    assert.match(body, /<a href="https:\/\/login\.microsoftonline\.com\/fa7b1b5a-7b34-4387-94ae-d2c178decee1\/oauth2\/v2\.0\/authorize\?client_id=client-id&amp;scope=user\.read%20openid%20profile%20offline_access&amp;redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken&amp;client-request-id=[0-9a-f-]+&amp;response_mode=form_post&amp;response_type=code&amp;x-client-SKU=msal\.js\.node&amp;x-client-VER=1\.3\.3&amp;x-client-OS=[^&]+&amp;x-client-CPU=[^&]+&amp;client_info=1&amp;prompt=consent&amp;state=a%2Fowner%2Frepo">Connect to Sharepoint \/ Onedrive<\/a>/);
+    assert.strictEqual(body.mp.url, 'https://adobe.sharepoint.com/sites/TheBlog/Shared%20Documents/theblog');
+    assert.match(body.links.odLogin, /https:\/\/login\.microsoftonline\.com\/fa7b1b5a-7b34-4387-94ae-d2c178decee1\/oauth2\/v2\.0\/authorize\?client_id=client-id&scope=user\.read%20openid%20profile%20offline_access&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken&client-request-id=[0-9a-f-]+&response_mode=form_post&response_type=code&x-client-SKU=msal\.js\.node&x-client-VER=1\.3\.3&x-client-OS=[^&]+&x-client-CPU=[^&]+&client_info=1&prompt=consent&state=a%2Fowner%2Frepo/);
   });
 
   it('sharepoint token endpoint can receive token', async () => {
@@ -301,14 +294,15 @@ describe('Index Tests (sharepoint)', () => {
         mail: 'helix@adobe.com',
       });
 
-    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/connect/owner/repo', {
+    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/info/owner/repo', {
       AZURE_WORD2MD_CLIENT_ID: '83ab2922-5f11-4e4d-96f3-d1e0ff152856',
       AZURE_WORD2MD_CLIENT_SECRET: 'client-secret',
     }));
     assert.strictEqual(resp.status, 200);
-    const body = await resp.text();
-    assert.match(body, /<a href="http:\/\/localhost:3000\/">start over<\/a>/);
-    assert.match(body, /content: <a href="https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog">https:\/\/adobe\.sharepoint\.com\/sites\/TheBlog\/Shared%20Documents\/theblog<\/a>/);
-    assert.match(body, /Connected user <strong>Helix Integration &lt;<a href="mailto:helix@adobe.com">helix@adobe.com<\/a>&gt;<\/strong>/);
+    const body = await resp.json();
+    assert.deepStrictEqual(body.me, {
+      displayName: 'Helix Integration',
+      mail: 'helix@adobe.com',
+    });
   });
 });
