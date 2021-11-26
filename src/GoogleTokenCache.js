@@ -38,29 +38,19 @@ export default class GoogleTokenCache {
 
   deserialize(str) {
     this.tokens = JSON.parse(str);
-    this.client.setCredentials(this.tokens);
   }
 
   async load() {
     return this.plugin.beforeCacheAccess(this.context);
   }
 
-  /**
-   *
-   * @param {CredentialsClient} client
-   */
-  async attach(client) {
-    this.client = client;
-    this.client.on('tokens', async (tokens) => {
-      this.tokens = tokens;
-      this.context.cacheHasChanged = true;
-      try {
-        await this.plugin.afterCacheAccess(this.context);
-      } finally {
-        this.context.cacheHasChanged = false;
-      }
-    });
-
-    await this.load();
+  async store(tokens) {
+    this.tokens = tokens;
+    this.context.cacheHasChanged = true;
+    try {
+      await this.plugin.afterCacheAccess(this.context);
+    } finally {
+      this.context.cacheHasChanged = false;
+    }
   }
 }

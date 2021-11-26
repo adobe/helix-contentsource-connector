@@ -10,10 +10,14 @@
  * governing permissions and limitations under the License.
  */
 
+import { context, h1 } from '@adobe/helix-fetch';
 import { logLevelForStatusCode, propagateStatusCode } from '@adobe/helix-shared-utils';
 import { MountConfig } from '@adobe/helix-shared-config';
 import fetchS3 from './fetch-s3.js';
-import { fetch, getFetchOptions } from './utils.js';
+
+export const { fetch } = process.env.HELIX_FETCH_FORCE_HTTP1
+  /* c8 ignore next */ ? h1()
+  /* c8 ignore next */ : context();
 
 /**
  * Checks if the response is valid and returns a mount config.
@@ -67,8 +71,15 @@ export default async function fstab(ctx, opts, optional) {
   }
 
   // try loading from github for non helix-3 repos
+  const headers = {};
   key = `${owner}/${repo}/${branch || ref}/fstab.yaml`;
-  response = await fetch(`https://raw.githubusercontent.com/${key}`, getFetchOptions(ctx, {}));
+  if (ctx.githubToken) {
+    headers.authorization = `token ${ctx.githubToken}`;
+  }
+  response = await fetch(`https://raw.githubusercontent.com/${key}`, {
+    cache: 'no-store',
+    headers,
+  });
   ctx.mountConfig = await handleResponse(log, response, key, 'github');
   if (ctx.mountConfig) {
     return ctx.mountConfig;

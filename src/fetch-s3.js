@@ -66,9 +66,6 @@ export default async function fetchS3(context, bucketId, key, head = false) {
     if (res.ContentType) {
       headers['content-type'] = res.ContentType;
     }
-    if (res.ContentLength) {
-      headers['x-source-content-length'] = res.ContentLength;
-    }
     if (res.Metadata) {
       Object.entries(res.Metadata).forEach(([name, value]) => {
         headers[name] = value;

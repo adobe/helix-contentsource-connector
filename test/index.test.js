@@ -111,6 +111,31 @@ describe('Index Tests', () => {
     assert.match(body, /Enter github url/);
   });
 
+  it('renders scripts.js', async () => {
+    const resp = await main(new Request('https://localhost/'), DEFAULT_CONTEXT('/scripts.js'));
+    assert.strictEqual(resp.status, 200);
+    const body = await resp.text();
+    assert.deepStrictEqual(resp.headers.plain(), {
+      'content-type': 'application/javascript',
+    });
+    assert.match(body, /addEventListener/);
+  });
+
+  it('renders styles.css', async () => {
+    const resp = await main(new Request('https://localhost/'), DEFAULT_CONTEXT('/styles.css'));
+    assert.strictEqual(resp.status, 200);
+    const body = await resp.text();
+    assert.deepStrictEqual(resp.headers.plain(), {
+      'content-type': 'text/css',
+    });
+    assert.match(body, /display: none/);
+  });
+
+  it('disconnect rejects GET', async () => {
+    const resp = await main(new Request('https://localhost/'), DEFAULT_CONTEXT('/disconnect/owner/repo'));
+    assert.strictEqual(resp.status, 405);
+  });
+
   it('renders error for no fstab', async () => {
     nock.fstab('', 'owner', 'repo', 'main');
     nock('https://raw.githubusercontent.com')
@@ -150,6 +175,120 @@ describe('Index Tests (google)', () => {
     assert.strictEqual(resp.status, 200);
     const body = await resp.json();
     assert.strictEqual(body.links.gdLogin, 'https://accounts.google.com/o/oauth2/v2/auth?scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fspreadsheets%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdocuments&access_type=offline&prompt=consent&state=g%2Fowner%2Frepo&response_type=code&client_id=&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Ftoken');
+  });
+
+  it('google token endpoint can receive token', async () => {
+    let cache;
+    nock.fstab(FSTAB_GD, 'owner', 'repo', 'main');
+    nock('https://oauth2.googleapis.com')
+      .post('/token')
+      .reply(200, RESP_AUTH_DEFAULT);
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=GetObject')
+      .reply(404)
+      .put('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=PutObject')
+      .reply((uri, body) => {
+        cache = Buffer.from(body, 'hex');
+        return [201];
+      });
+
+    const resp = await main(DEFAULT_REQUEST({
+      method: 'POST',
+      body: encode({
+        code: '123',
+        client_info: '123',
+        state: 'g/owner/repo',
+      }),
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+    }), DEFAULT_CONTEXT('/token', {
+      GOOGLE_HELIX_CLIENT_ID: 'client-id',
+      GOOGLE_HELIX_CLIENT_SECRET: 'client-secret',
+    }));
+
+    assert.strictEqual(resp.status, 302);
+    assert.deepStrictEqual(resp.headers.plain(), {
+      'content-type': 'text/plain; charset=utf-8',
+      location: '/connect/owner/repo',
+    });
+
+    const data = decrypt('853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f', cache).toString('utf-8');
+    const json = filterProperties(JSON.parse(data), ['expiry_date', 'extended_expires_on', 'cached_at']);
+    assert.deepStrictEqual(json, {
+      access_token: 'dummy',
+      refresh_token: 'dummy',
+      token_type: 'Bearer',
+    });
+  });
+
+  it('google token endpoint can disconnect', async () => {
+    let cache;
+    nock.fstab(FSTAB_GD, 'owner', 'repo', 'main');
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=GetObject')
+      .reply(404)
+      .put('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=PutObject')
+      .reply((uri, body) => {
+        cache = Buffer.from(body, 'hex');
+        return [201];
+      });
+
+    const resp = await main(DEFAULT_REQUEST({
+      method: 'POST',
+    }), DEFAULT_CONTEXT('/disconnect/owner/repo', {
+      GOOGLE_HELIX_CLIENT_ID: 'client-id',
+      GOOGLE_HELIX_CLIENT_SECRET: 'client-secret',
+    }));
+
+    assert.strictEqual(resp.status, 200);
+
+    const data = decrypt('853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f', cache).toString('utf-8');
+    const json = filterProperties(JSON.parse(data), ['expiry_date', 'extended_expires_on', 'cached_at']);
+    assert.deepStrictEqual(json, {});
+  });
+
+  it('google mountpoint renders connected', async () => {
+    const authData = encrypt(
+      '853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f',
+      Buffer.from(JSON.stringify({
+        access_token: 'dummy',
+        refresh_token: 'dummy',
+        token_type: 'Bearer',
+        expiry_date: Date.now() - 1000,
+      }), 'utf-8'),
+    );
+
+    nock.fstab(FSTAB_GD, 'owner', 'repo', 'main');
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=GetObject')
+      .reply(200, authData, {
+        'content-type': 'application/octet-stream',
+      })
+      .put('/853bced1f82a05e9d27a8f63ecac59e70d9c14680dc5e417429f65e988f/.helix-auth?x-id=PutObject')
+      .reply(200);
+
+    nock('https://oauth2.googleapis.com')
+      .post('/token')
+      .reply(200, RESP_AUTH_DEFAULT);
+    nock('https://www.googleapis.com')
+      .get('/oauth2/v2/userinfo')
+      .reply(200, {
+        email: 'helix@adobe.com',
+        id: '1234',
+      });
+
+    const resp = await main(DEFAULT_REQUEST(), DEFAULT_CONTEXT('/info/owner/repo', {
+      GOOGLE_HELIX_CLIENT_ID: 'client-id',
+      GOOGLE_HELIX_CLIENT_SECRET: 'client-secret',
+    }));
+    assert.strictEqual(resp.status, 200);
+    const body = await resp.json();
+    assert.deepStrictEqual(body.me, {
+      displayName: '',
+      mail: 'helix@adobe.com',
+      id: '1234',
+    });
   });
 });
 
@@ -263,6 +402,45 @@ describe('Index Tests (sharepoint)', () => {
           secret: 'dummy',
         },
       },
+    });
+  });
+
+  it('sharepoint token endpoint can disconnect', async () => {
+    const authData = encrypt(
+      '9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d',
+      Buffer.from(JSON.stringify(testAuth()), 'utf-8'),
+    );
+
+    let cache;
+    nock.fstab(FSTAB_1D, 'owner', 'repo', 'main');
+    nock('https://helix-content-bus.s3.us-east-1.amazonaws.com')
+      .get('/9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d/.helix-auth?x-id=GetObject')
+      .reply(200, authData, {
+        'content-type': 'application/octet-stream',
+      })
+      .put('/9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d/.helix-auth?x-id=PutObject')
+      .reply((uri, body) => {
+        cache = Buffer.from(body, 'hex');
+        return [201];
+      });
+
+    const resp = await main(DEFAULT_REQUEST({
+      method: 'POST',
+    }), DEFAULT_CONTEXT('/disconnect/owner/repo', {
+      AZURE_WORD2MD_CLIENT_ID: 'client-id',
+      AZURE_WORD2MD_CLIENT_SECRET: 'client-secret',
+    }));
+
+    assert.strictEqual(resp.status, 200);
+
+    const data = decrypt('9b08ed882cc3217ceb23a3e71d769dbe47576312869465a0a302ed29c6d', cache).toString('utf-8');
+    const json = filterProperties(JSON.parse(data), ['expiry_date', 'extended_expires_on', 'cached_at']);
+    assert.deepStrictEqual(json, {
+      AccessToken: {},
+      Account: {},
+      AppMetadata: {},
+      IdToken: {},
+      RefreshToken: {},
     });
   });
 

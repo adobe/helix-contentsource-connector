@@ -75,7 +75,6 @@ export default class S3CachePlugin {
         }));
         return true;
       } catch (e) {
-        // eslint-disable-next-line no-console
         log.warn('s3: unable to serialize token cache', e);
       }
     }

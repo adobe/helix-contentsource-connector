@@ -25,7 +25,7 @@ import MemCachePlugin from './MemCachePlugin.js';
 import pkgJson from './package.cjs';
 import fetchFstab from './fetch-fstab.js';
 import S3CachePlugin from './S3CachePlugin.js';
-import GoogleTokenCache from './GoogleTokenCache.js';
+import GoogleClient from './GoogleClient.js';
 
 const AZURE_SCOPES = [
   'user.read',
@@ -118,15 +118,10 @@ function getRedirectUrl(req, ctx, path) {
   return `${host.startsWith('localhost') ? 'http' : 'https'}://${host}${rootPath}${path}`;
 }
 
-async function getOAuthClient(req, context, opts) {
+async function getGoogleClient(req, context, opts) {
   if (!context.gc) {
     const { log, env } = context;
     const { owner, repo, contentBusId } = opts;
-    const client = new google.auth.OAuth2(
-      env.GOOGLE_HELIX_CLIENT_ID,
-      env.GOOGLE_HELIX_CLIENT_SECRET,
-      getRedirectUrl(req, context, '/token'),
-    );
 
     const key = `${contentBusId}/.helix-auth`;
     const base = process.env.AWS_EXECUTION_ENV
@@ -134,10 +129,14 @@ async function getOAuthClient(req, context, opts) {
       : new FSCachePlugin(`.auth-${contentBusId}--${owner}--${repo}.json`).withLogger(log);
 
     const plugin = new MemCachePlugin(context, { key, base });
-    const cache = new GoogleTokenCache(plugin).withLog(log);
-    await cache.attach(client);
-
-    context.gc = client;
+    context.gc = await new GoogleClient({
+      log,
+      contentBusId,
+      clientId: env.GOOGLE_HELIX_CLIENT_ID,
+      clientSecret: env.GOOGLE_HELIX_CLIENT_SECRET,
+      redirectUri: getRedirectUrl(req, context, '/token'),
+      plugin,
+    }).init();
   }
   return context.gc;
 }
@@ -203,7 +202,6 @@ async function serveStatic(request, context) {
   return new Response(data, {
     headers: {
       'content-type': mime.getType(suffix),
-      'cache-control': 'no-cache, private',
     },
   });
 }
@@ -242,9 +240,8 @@ async function run(request, context) {
             redirectUri: getRedirectUrl(request, context, '/token'),
           });
         } else if (type === 'g') {
-          const oauth2Client = await getOAuthClient(request, context, info);
-          const { tokens } = await oauth2Client.getToken(code);
-          await oauth2Client.emit('tokens', tokens);
+          const oauth2Client = await getGoogleClient(request, context, info);
+          await oauth2Client.getToken(code);
         } else {
           throw new Error(`illegal type: ${type}`);
         }
@@ -282,8 +279,8 @@ async function run(request, context) {
           await Promise.all((await cache.getAllAccounts())
             .map(async (acc) => cache.removeAccount(acc)));
         } else if (info.mp.type === 'google') {
-          const oauth2Client = await getOAuthClient(request, context, info);
-          await oauth2Client.emit('tokens', { });
+          const oauth2Client = await getGoogleClient(request, context, info);
+          await oauth2Client.setCredentials({});
         }
 
         return new Response('', {
@@ -329,9 +326,9 @@ async function run(request, context) {
             });
           }
         } else if (info.mp.type === 'google') {
-          const oauth2Client = await getOAuthClient(request, context, info);
+          const googleClient = await getGoogleClient(request, context, info);
           try {
-            const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+            const oauth2 = google.oauth2({ version: 'v2', auth: googleClient.client });
             const userInfo = await oauth2.userinfo.get();
             // console.log(userInfo);
             const { data: { email: mail, id } } = userInfo;
@@ -346,7 +343,7 @@ async function run(request, context) {
             log.info(`error reading user profile: ${e.message}`);
           }
           if (!info.me) {
-            info.links.gdLogin = oauth2Client.generateAuthUrl({
+            info.links.gdLogin = await googleClient.generateAuthUrl({
               scope: GOOGLE_SCOPES,
               access_type: 'offline',
               prompt: 'consent',
