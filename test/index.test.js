@@ -14,7 +14,7 @@
 
 import assert from 'assert';
 import { encode } from 'querystring';
-import { Request } from '@adobe/helix-universal';
+import { Request } from '@adobe/helix-fetch';
 import { Nock, filterProperties } from './utils.js';
 import { decrypt, encrypt } from '../src/encrypt.js';
 import MemCachePlugin from '../src/MemCachePlugin.js';

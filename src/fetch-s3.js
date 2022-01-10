@@ -11,7 +11,7 @@
  */
 import { promisify } from 'util';
 import zlib from 'zlib';
-import { Response } from '@adobe/helix-universal';
+import { Response } from '@adobe/helix-fetch';
 
 import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
