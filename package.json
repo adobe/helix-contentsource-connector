@@ -13,16 +13,17 @@
     "lint": "./node_modules/.bin/eslint .",
     "semantic-release": "semantic-release",
     "build": "hedy -v",
-    "deploy": "unset HLX_AWS_ROLE; hedy -v --deploy --test",
-    "deploy-sequences": "unset HLX_AWS_ROLE; hedy --no-build -no-hints -l major -l minor --cleanup-patch 1w --cleanup-minor 1m --cleanup-major 1y",
-    "deploy-ci": "unset HLX_AWS_ROLE; hedy -v --deploy --test --pkgVersion=ci$CIRCLE_BUILD_NUM -l ci --cleanup-ci 24h",
+    "deploy": "hedy -v --deploy --test",
+    "deploy-sequences": "hedy --no-build -no-hints -l major -l minor --cleanup-patch 1w --cleanup-minor 1m --cleanup-major 1y",
+    "deploy-ci": "hedy -v --deploy --test --pkgVersion=ci$CIRCLE_BUILD_NUM -l ci --cleanup-ci 24h",
     "prepare": "husky install"
   },
   "wsk": {
     "target": "aws",
     "name": "helix-services/contentsource-connector@${version}",
     "memory": 512,
-    "awsRole": "arn:aws:iam::118435662149:role/helix-service-role-s3-rw",
+    "awsRole!important": "arn:aws:iam::118435662149:role/helix-service-role-s3-rw",
+    "fastlyServiceId!important": "",
     "testUrl": "/_status_check/healthcheck.json",
     "static": [
       "views/header.ejs",
