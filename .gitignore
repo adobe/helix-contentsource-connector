@@ -1,7 +1,7 @@
 coverage
 .env
 .nyc_output/
-.auth*.json
+.auth*
 node_modules/
 junit
 dist

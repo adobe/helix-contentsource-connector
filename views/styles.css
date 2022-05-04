@@ -17,3 +17,6 @@
 #error-text {
     color: red;
 }
+#user-name {
+    width: 100px;
+}

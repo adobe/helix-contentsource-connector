@@ -14,18 +14,18 @@ import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 import ejs from 'ejs';
 import mime from 'mime';
-import { FSCachePlugin, OneDrive } from '@adobe/helix-onedrive-support';
+import {
+  MemCachePlugin, OneDriveAuth, FSCacheManager, S3CacheManager,
+} from '@adobe/helix-onedrive-support';
+import { GoogleClient } from '@adobe/helix-google-support';
 import { google } from 'googleapis';
 import wrap from '@adobe/helix-shared-wrap';
 import bodyData from '@adobe/helix-shared-body-data';
 import { logger } from '@adobe/helix-universal-logger';
 import { wrap as status } from '@adobe/helix-status';
 import { Response } from '@adobe/helix-fetch';
-import MemCachePlugin from './MemCachePlugin.js';
 import pkgJson from './package.cjs';
 import fetchFstab from './fetch-fstab.js';
-import S3CachePlugin from './S3CachePlugin.js';
-import GoogleClient from './GoogleClient.js';
 
 const ROOT_PATH = '/register';
 
@@ -38,6 +38,7 @@ const AZURE_SCOPES = [
 
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/documents',
@@ -65,39 +66,6 @@ async function render(name, data) {
   });
 }
 
-/**
- * @param context
- * @returns {OneDrive}
- */
-function getOneDriveClient(context, opts) {
-  if (!context.od) {
-    const { log, env } = context;
-    const { owner, repo, contentBusId } = opts;
-    const {
-      AZURE_WORD2MD_CLIENT_ID: clientId,
-      AZURE_WORD2MD_CLIENT_SECRET: clientSecret,
-      AZURE_WORD2MD_TENANT: tenant = 'fa7b1b5a-7b34-4387-94ae-d2c178decee1',
-    } = env;
-
-    const key = `${contentBusId}/.helix-auth`;
-    const base = process.env.AWS_EXECUTION_ENV
-      ? new S3CachePlugin(context, { key, secret: contentBusId })
-      : new FSCachePlugin(`.auth-${contentBusId}--${owner}--${repo}.json`).withLogger(log);
-    const plugin = new MemCachePlugin(context, { key, base });
-
-    context.od = new OneDrive({
-      clientId,
-      tenant,
-      clientSecret,
-      log,
-      localAuthCache: {
-        plugin,
-      },
-    });
-  }
-  return context.od;
-}
-
 function getRedirectRoot(req, ctx) {
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? '';
   //  Checks if this is requested directly to the api gateway
@@ -114,24 +82,59 @@ function getRedirectUrl(req, ctx, path) {
   return `${host.startsWith('localhost') ? 'http' : 'https'}://${host}${rootPath}${path}`;
 }
 
+async function getCachePlugin(context, opts) {
+  const { log } = context;
+  const {
+    user, contentBusId, cacheManager, repo,
+  } = opts;
+  if (!user) {
+    return null;
+  }
+  const key = `${contentBusId}/${repo}/${user}`;
+  const base = await cacheManager.getCache(user);
+  return new MemCachePlugin({ log, key, base });
+}
+
+/**
+ * @param context
+ * @returns {OneDriveAuth}
+ */
+async function getOneDriveClient(context, opts) {
+  if (!context.od) {
+    const { log, env } = context;
+    const {
+      AZURE_WORD2MD_CLIENT_ID: clientId,
+      AZURE_WORD2MD_CLIENT_SECRET: clientSecret,
+    } = env;
+    const cachePlugin = await getCachePlugin(context, opts);
+
+    context.od = new OneDriveAuth({
+      log,
+      clientId,
+      clientSecret,
+      cachePlugin,
+    });
+
+    // init tenant via mountpoint url
+    await context.od.initTenantFromUrl(opts.mp.url);
+  }
+  // this is a bit a hack
+  // eslint-disable-next-line no-param-reassign
+  opts.tenantId = context.od.tenant;
+  return context.od;
+}
+
 async function getGoogleClient(req, context, opts) {
   if (!context.gc) {
     const { log, env } = context;
-    const { owner, repo, contentBusId } = opts;
+    const cachePlugin = await getCachePlugin(context, opts);
 
-    const key = `${contentBusId}/.helix-auth`;
-    const base = process.env.AWS_EXECUTION_ENV
-      ? new S3CachePlugin(context, { key, secret: contentBusId })
-      : new FSCachePlugin(`.auth-${contentBusId}--${owner}--${repo}.json`).withLogger(log);
-
-    const plugin = new MemCachePlugin(context, { key, base });
     context.gc = await new GoogleClient({
       log,
-      contentBusId,
-      clientId: env.GOOGLE_HELIX_CLIENT_ID,
-      clientSecret: env.GOOGLE_HELIX_CLIENT_SECRET,
+      clientId: env.GOOGLE_DOCS2MD_CLIENT_ID,
+      clientSecret: env.GOOGLE_DOCS2MD_CLIENT_SECRET,
       redirectUri: getRedirectUrl(req, context, '/token'),
-      plugin,
+      cachePlugin,
     }).init();
   }
   return context.gc;
@@ -143,41 +146,75 @@ async function getGoogleClient(req, context, opts) {
  * @param {UniversalActionContext} ctx
  * @param {string} [opts.owner] owner
  * @param {string} [opts.repo] repo
+ * @param {string} [opts.user] user
  * @returns {Promise<*>} the info
  */
-async function getProjectInfo(request, ctx, { owner, repo }) {
+async function getProjectInfo(request, ctx, { owner, repo, user }) {
   let mp;
   let contentBusId;
   let githubUrl = '';
   let error = '';
+  let cacheManager;
 
   if (owner && repo) {
-    try {
-      const fstab = await fetchFstab(ctx, {
-        owner,
-        repo,
-        ref: 'main',
-      });
-      [mp] = fstab.mountpoints;
+    if (owner === 'default' && repo === 'onedrive') {
+      // workaround to register default onedrive user
+      contentBusId = 'default';
+      mp = {
+        type: 'onedrive',
+        url: 'https://adobe.sharepoint.com/',
+      };
+    } else if (owner === 'default' && repo === 'google') {
+      // workaround to register default onedrive user
+      contentBusId = 'default';
+      mp = {
+        type: 'google',
+        url: 'https://adobe.sharepoint.com/',
+      };
+    } else {
+      try {
+        const fstab = await fetchFstab(ctx, {
+          owner,
+          repo,
+          ref: 'main',
+        });
+        [mp] = fstab.mountpoints;
 
-      const sha256 = crypto
-        .createHash('sha256')
-        .update(mp.url)
-        .digest('hex');
-      contentBusId = `${sha256.substr(0, 59)}`;
-      githubUrl = `https://github.com/${owner}/${repo}`;
-    } catch (e) {
-      ctx.log.error('error fetching fstab:', e);
-      error = e.message;
+        const sha256 = crypto
+          .createHash('sha256')
+          .update(mp.url)
+          .digest('hex');
+        contentBusId = `${sha256.substr(0, 59)}`;
+        githubUrl = `https://github.com/${owner}/${repo}`;
+      } catch (e) {
+        ctx.log.error('error fetching fstab:', e);
+        error = e.message;
+      }
     }
+
+    cacheManager = process.env.AWS_EXECUTION_ENV
+      ? new S3CacheManager({
+        log: ctx.log,
+        prefix: `${contentBusId}/.helix-auth`,
+        secret: contentBusId,
+        bucket: 'helix-content-bus',
+        type: mp?.type,
+      })
+      : new FSCacheManager({
+        log: ctx.log,
+        dirPath: `.auth-${contentBusId}--${owner}--${repo}`,
+        type: mp?.type,
+      });
   }
 
-  return {
+  const ret = {
     owner,
     repo,
+    user,
     mp,
     contentBusId,
     githubUrl,
+    tenantId: '',
     error,
     version: pkgJson.version,
     links: {
@@ -190,6 +227,10 @@ async function getProjectInfo(request, ctx, { owner, repo }) {
       styles: getRedirectUrl(request, ctx, '/styles.css'),
     },
   };
+  return Object.defineProperty(ret, 'cacheManager', {
+    value: cacheManager,
+    enumerable: false,
+  });
 }
 
 async function serveStatic(path) {
@@ -221,21 +262,22 @@ async function run(request, context) {
     return serveStatic(path);
   }
 
-  const [, route, owner, repo] = path.split('/');
+  const [, route, owner, repo, user] = path.split('/');
 
   /* ------------ token ------------------ */
   if (route === 'token') {
     const { code, state } = data;
-    const [type, own, rep] = state.split('/');
+    const [type, own, rep, usr] = state.split('/');
 
     const info = await getProjectInfo(request, context, {
       owner: own,
       repo: rep,
+      user: usr,
     });
     if (!info.error) {
       try {
         if (type === 'a') {
-          const od = getOneDriveClient(context, info);
+          const od = await getOneDriveClient(context, info);
           await od.app.acquireTokenByCode({
             code,
             scopes: AZURE_SCOPES,
@@ -251,7 +293,7 @@ async function run(request, context) {
         return new Response('', {
           status: 302,
           headers: {
-            location: `${getRedirectRoot(request, context)}/connect/${own}/${rep}`,
+            location: `${getRedirectRoot(request, context)}/connect/${own}/${rep}/${usr}`,
           },
         });
       } catch (e) {
@@ -263,7 +305,7 @@ async function run(request, context) {
   }
 
   /* ------------ disconnect ------------------ */
-  if (route === 'disconnect' && owner && repo) {
+  if (route === 'disconnect' && owner && repo && user) {
     if (request.method === 'GET') {
       return new Response('', {
         status: 405,
@@ -272,22 +314,17 @@ async function run(request, context) {
     const info = await getProjectInfo(request, context, {
       owner,
       repo,
+      user,
     });
     if (!info.error) {
       try {
         if (info.mp.type === 'onedrive') {
-          const od = getOneDriveClient(context, info);
-          const cache = od.app.getTokenCache();
-          await Promise.all((await cache.getAllAccounts())
-            .map(async (acc) => cache.removeAccount(acc)));
+          const od = await getOneDriveClient(context, info);
+          await od.cachePlugin.deleteCache();
         } else if (info.mp.type === 'google') {
-          const oauth2Client = await getGoogleClient(request, context, info);
-          await oauth2Client.setCredentials({});
+          const gc = await getGoogleClient(request, context, info);
+          await gc.cachePlugin.deleteCache();
         }
-
-        return new Response('', {
-          status: 200,
-        });
       } catch (e) {
         log.error('error clearing token', e);
         info.error = `error clearing token: ${e.message}`;
@@ -306,51 +343,66 @@ async function run(request, context) {
     const info = await getProjectInfo(request, context, {
       owner,
       repo,
+      user,
     });
     if (!info.error) {
       try {
+        const cacheKeys = await info.cacheManager.listCacheKeys();
+        info.users = cacheKeys.map((name) => ({
+          name,
+          url: getRedirectUrl(request, context, `/connect/${owner}/${repo}/${name}`),
+        }));
         if (info.mp.type === 'onedrive') {
-          const od = getOneDriveClient(context, info);
-
-          // check for token
-          if (await od.getAccessToken(true)) {
-            const me = await od.me();
-            log.info('installed user', me);
-            info.me = me;
-          } else {
-            // get url to sign user in and consent to scopes needed for application
-            info.links.odLogin = await od.app.getAuthCodeUrl({
-              scopes: AZURE_SCOPES,
-              redirectUri: getRedirectUrl(request, context, '/token'),
-              responseMode: 'form_post',
-              prompt: 'consent',
-              state: `a/${owner}/${repo}`,
-            });
+          const od = await getOneDriveClient(context, info);
+          // get url to sign user in and consent to scopes needed for application
+          info.links.login = await od.app.getAuthCodeUrl({
+            scopes: AZURE_SCOPES,
+            redirectUri: getRedirectUrl(request, context, '/token'),
+            responseMode: 'form_post',
+            prompt: 'consent',
+            state: `a/${owner}/${repo}`,
+          });
+          if (user) {
+            // check for token
+            const authResult = await od.authenticate(true);
+            // console.log(authResult);
+            if (authResult) {
+              info.profile = {
+                name: authResult.account.name,
+                username: authResult.account.username,
+                scopes: authResult.scopes,
+                idp: authResult.idTokenClaims.idp,
+                iss: authResult.idTokenClaims.iss,
+              };
+            } else {
+              log.info('not authenticated');
+            }
           }
         } else if (info.mp.type === 'google') {
           const googleClient = await getGoogleClient(request, context, info);
-          try {
-            const oauth2 = google.oauth2({ version: 'v2', auth: googleClient.client });
-            const userInfo = await oauth2.userinfo.get();
-            // console.log(userInfo);
-            const { data: { email: mail, id } } = userInfo;
-            info.me = {
-              displayName: '',
-              mail,
-              id,
-            };
-            log.info('installed user', info.me);
-          } catch (e) {
-            // ignore
-            log.info(`error reading user profile: ${e.message}`);
-          }
-          if (!info.me) {
-            info.links.gdLogin = await googleClient.generateAuthUrl({
-              scope: GOOGLE_SCOPES,
-              access_type: 'offline',
-              prompt: 'consent',
-              state: `g/${owner}/${repo}`,
-            });
+          info.links.login = await googleClient.generateAuthUrl({
+            scope: GOOGLE_SCOPES,
+            access_type: 'offline',
+            prompt: 'consent',
+            state: `g/${owner}/${repo}`,
+          });
+          if (user) {
+            try {
+              const oauth2 = google.oauth2({ version: 'v2', auth: googleClient.auth });
+              const userInfo = await oauth2.userinfo.get();
+              // console.log(userInfo);
+              const { data: { email: mail, name, hd } } = userInfo;
+              info.profile = {
+                name,
+                username: mail,
+                idp: hd,
+                iss: '',
+                scopes: GOOGLE_SCOPES,
+              };
+            } catch (e) {
+              // ignore
+              log.info(`error reading user profile: ${e.message}`);
+            }
           }
         }
       } catch (e) {

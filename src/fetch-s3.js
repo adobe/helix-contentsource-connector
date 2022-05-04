@@ -32,19 +32,10 @@ export default async function fetchS3(context, bucketId, key, head = false) {
   if (!key) {
     throw new Error('Unknown key, cannot fetch content');
   }
-  const { log, env = {} } = context;
+  const { log } = context;
 
   try {
-    // the client initialization is a bit picky with undefined properties.
-    // so we omit the credentials when we provide them via context.env
-    const opts = !env.AWS_S3_ACCESS_KEY_ID ? {} : {
-      region: env.AWS_S3_REGION,
-      credentials: {
-        accessKeyId: env.AWS_S3_ACCESS_KEY_ID,
-        secretAccessKey: env.AWS_S3_SECRET_ACCESS_KEY,
-      },
-    };
-    const s3 = new S3Client(opts);
+    const s3 = new S3Client();
     const Command = head ? HeadObjectCommand : GetObjectCommand;
     const res = await s3.send(new Command({
       Bucket: bucketId,

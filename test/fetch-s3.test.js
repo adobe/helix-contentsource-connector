@@ -22,21 +22,27 @@ const gzip = promisify(zlib.gzip);
 
 const DEFAULT_CONTEXT = {
   log: console,
-  env: {
-    AWS_S3_REGION: 'us-east-1',
-    AWS_S3_ACCESS_KEY_ID: 'fake-key-id',
-    AWS_S3_SECRET_ACCESS_KEY: 'fake-secret',
-  },
+  env: {},
 };
 
 describe('fetch-s3 tests', () => {
   let nock;
+  let savedProcessEnv;
   beforeEach(() => {
     nock = new Nock();
+    savedProcessEnv = process.env;
+    process.env = {
+      ...process.env,
+      AWS_REGION: 'us-east-1',
+      AWS_ACCESS_KEY_ID: 'fake-key-id',
+      AWS_SECRET_ACCESS_KEY: 'fake-secret',
+      AWS_EXECUTION_ENV: 'aws-foo',
+    };
   });
 
   afterEach(() => {
     nock.done();
+    process.env = savedProcessEnv;
   });
 
   it('throws error if no bucket id', async () => {

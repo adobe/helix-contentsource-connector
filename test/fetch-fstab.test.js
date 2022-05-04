@@ -16,11 +16,7 @@ import fetchFstab from '../src/fetch-fstab.js';
 
 const DEFAULT_CONTEXT = () => ({
   log: console,
-  env: {
-    AWS_S3_REGION: 'us-east-1',
-    AWS_S3_ACCESS_KEY_ID: 'fake-key-id',
-    AWS_S3_SECRET_ACCESS_KEY: 'fake-secret',
-  },
+  env: {},
 });
 
 const FSTAB = `
@@ -32,12 +28,22 @@ mountpoints:
 
 describe('fetch-fstab tests', () => {
   let nock;
+  let savedProcessEnv;
   beforeEach(() => {
     nock = new Nock();
+    savedProcessEnv = process.env;
+    process.env = {
+      ...process.env,
+      AWS_REGION: 'us-east-1',
+      AWS_ACCESS_KEY_ID: 'fake-key-id',
+      AWS_SECRET_ACCESS_KEY: 'fake-secret',
+      AWS_EXECUTION_ENV: 'aws-foo',
+    };
   });
 
   afterEach(() => {
     nock.done();
+    process.env = savedProcessEnv;
   });
 
   it('downloads fstab from code-bus', async () => {
