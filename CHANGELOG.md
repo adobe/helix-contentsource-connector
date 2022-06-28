@@ -1,3 +1,136 @@
+## [1.0.74](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.73...v1.0.74) (2022-06-25)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([f0691f1](https://github.com/adobe/helix-contentsource-connector/commit/f0691f1770563e5ca7bfb0251cb9639241e9f473))
+
+## [1.0.73](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.72...v1.0.73) (2022-06-24)
+
+
+### Bug Fixes
+
+* **deps:** update dependency googleapis to v104 ([#146](https://github.com/adobe/helix-contentsource-connector/issues/146)) ([696f285](https://github.com/adobe/helix-contentsource-connector/commit/696f2856d9d6750b9d1dd3791e977e884c8441e3))
+
+## [1.0.72](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.71...v1.0.72) (2022-06-19)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([139806e](https://github.com/adobe/helix-contentsource-connector/commit/139806e0250f2d5cf8bcd1072aef10f1ec8d740b))
+
+## [1.0.71](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.70...v1.0.71) (2022-06-18)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v8.2.0 ([#143](https://github.com/adobe/helix-contentsource-connector/issues/143)) ([939d23e](https://github.com/adobe/helix-contentsource-connector/commit/939d23ee0b012c020b7c204030d30c4d1b3a9e85))
+
+## [1.0.70](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.69...v1.0.70) (2022-06-16)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([70e09cd](https://github.com/adobe/helix-contentsource-connector/commit/70e09cd4b6855634cea616096b402db90dbc613a))
+
+## [1.0.69](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.68...v1.0.69) (2022-06-14)
+
+
+### Bug Fixes
+
+* **deps:** update dependency googleapis to v102 ([#140](https://github.com/adobe/helix-contentsource-connector/issues/140)) ([f867560](https://github.com/adobe/helix-contentsource-connector/commit/f867560e04d539782c67a8e2e01c142dc0a1650d))
+
+## [1.0.68](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.67...v1.0.68) (2022-06-11)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([e849d4b](https://github.com/adobe/helix-contentsource-connector/commit/e849d4b45df92dd175d482934dac843566a153d4))
+
+## [1.0.67](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.66...v1.0.67) (2022-06-05)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v8 ([#135](https://github.com/adobe/helix-contentsource-connector/issues/135)) ([770263a](https://github.com/adobe/helix-contentsource-connector/commit/770263a02febd7dd9800bf0e280e368e56b4d5a1))
+
+## [1.0.66](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.65...v1.0.66) (2022-06-04)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([#134](https://github.com/adobe/helix-contentsource-connector/issues/134)) ([b0e81a0](https://github.com/adobe/helix-contentsource-connector/commit/b0e81a05bf307356e50273508ccd6ccc55baa32b))
+
+## [1.0.65](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.64...v1.0.65) (2022-06-02)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v2.1.2 ([1220836](https://github.com/adobe/helix-contentsource-connector/commit/122083648b9bc46d4398b7bdc5f7fdaee6f04c09))
+
+## [1.0.64](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.63...v1.0.64) (2022-05-28)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([#130](https://github.com/adobe/helix-contentsource-connector/issues/130)) ([e396093](https://github.com/adobe/helix-contentsource-connector/commit/e396093f9080d30ce0a56e8c0ac183c59c9f6a88))
+
+## [1.0.63](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.62...v1.0.63) (2022-05-23)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v2.1.1 ([#128](https://github.com/adobe/helix-contentsource-connector/issues/128)) ([6a80769](https://github.com/adobe/helix-contentsource-connector/commit/6a80769df92770c23e17250937b28e45af2767b9))
+
+## [1.0.62](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.61...v1.0.62) (2022-05-21)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([35c1f32](https://github.com/adobe/helix-contentsource-connector/commit/35c1f327f46d4505072cab3c33e38ecc8237f5ac))
+
+## [1.0.61](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.60...v1.0.61) (2022-05-20)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v2.1.0 ([7321463](https://github.com/adobe/helix-contentsource-connector/commit/7321463adf220a474543d7f043fb9ce78a822ffc))
+
+## [1.0.60](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.59...v1.0.60) (2022-05-16)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([#123](https://github.com/adobe/helix-contentsource-connector/issues/123)) ([ed67ba5](https://github.com/adobe/helix-contentsource-connector/commit/ed67ba51438640d07bb86dc90bd5e8936e8ee997))
+
+## [1.0.59](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.58...v1.0.59) (2022-05-14)
+
+
+### Bug Fixes
+
+* **deps:** update adobe fixes ([0c564af](https://github.com/adobe/helix-contentsource-connector/commit/0c564afe507935e4a9d6db24bc897f0e1f864d0b))
+
+## [1.0.58](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.57...v1.0.58) (2022-05-14)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([#119](https://github.com/adobe/helix-contentsource-connector/issues/119)) ([4a46555](https://github.com/adobe/helix-contentsource-connector/commit/4a465557d15071fe372ad91ffee9e786debf95d0))
+
+## [1.0.57](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.56...v1.0.57) (2022-05-07)
+
+
+### Bug Fixes
+
+* **deps:** update external fixes ([2474015](https://github.com/adobe/helix-contentsource-connector/commit/247401537422dc3a3ce31584d89717037cf9dd7e))
+
+## [1.0.56](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.55...v1.0.56) (2022-05-06)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-shared-config to v2.0.6 ([#114](https://github.com/adobe/helix-contentsource-connector/issues/114)) ([9d95c8c](https://github.com/adobe/helix-contentsource-connector/commit/9d95c8cacbc97cd69f58846a729fe6298f8c4b75))
+
 ## [1.0.55](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.54...v1.0.55) (2022-05-03)
 
 
