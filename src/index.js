@@ -116,8 +116,13 @@ async function getOneDriveClient(context, opts) {
     });
 
     // init tenant via mountpoint url
-    await context.od.initTenantFromUrl(opts.mp.url);
+    if (opts.mp.tenantId) {
+      context.od.tenant = opts.mp.tenantId;
+    } else {
+      await context.od.initTenantFromUrl(opts.mp.url);
+    }
   }
+
   // this is a bit a hack
   // eslint-disable-next-line no-param-reassign
   opts.tenantId = context.od.tenant;
