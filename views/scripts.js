@@ -32,16 +32,37 @@ function showLoading(show) {
   }
 }
 
-function showInfo(data) {
-  if (!data) {
-    document.getElementById('info').classList.add('hidden');
+function showLoginLogout(data) {
+  if (data?.authInfo) {
+    document.getElementById('logout').classList.remove('hidden');
+    document.getElementById('login').classList.add('hidden');
+    document.getElementById('login-name').textContent = `${data.authInfo.name} <${data.authInfo.email || data.authInfo.preferred_username}>`;
   } else {
-    document.getElementById('info').classList.remove('hidden');
+    document.getElementById('login').classList.remove('hidden');
+    document.getElementById('logout').classList.add('hidden');
+  }
+  document.getElementById('btn-login').dataset.href = `${data.links.login}/${data.owner}/${data.repo}`;
+  document.getElementById('btn-logout').dataset.href = `${data.links.logout}/${data.owner}/${data.repo}`;
+}
+
+function showProjectInfo(data) {
+  if (!data) {
+    document.getElementById('project-info').classList.add('hidden');
+  } else {
+    document.getElementById('project-info').classList.remove('hidden');
     document.getElementById('info-title').textContent = `${data.owner} / ${data.repo}`;
     document.getElementById('info-github').href = data.githubUrl;
     document.getElementById('info-github').textContent = data.githubUrl;
-    document.getElementById('info-mp').href = data.mp.url;
-    document.getElementById('info-mp').textContent = data.mp.url;
+  }
+}
+
+function showMountInfo(data) {
+  if (!data) {
+    document.getElementById('mount-info').classList.add('hidden');
+  } else {
+    document.getElementById('mount-info').classList.remove('hidden');
+    document.getElementById('info-mp').href = data.mp?.url;
+    document.getElementById('info-mp').textContent = data.mp?.url;
     document.getElementById('info-contentBusId').textContent = data.contentBusId;
     document.getElementById('info-tenantId').textContent = data.tenantId;
   }
@@ -124,14 +145,20 @@ async function loadInfo(owner, repo, user) {
   const data = JSON.parse(await resp.text());
   // console.log(data);
   showError(data.error);
+  showLoginLogout(data);
   if (data.error) {
-    showInfo();
+    showProjectInfo();
+    showMountInfo();
     showGithubForm(true);
-    // showOnedriveConnect();
-    // showGoogleConnect();
+    showUserList();
+  } else if (!data.authInfo) {
+    showProjectInfo(data);
+    showMountInfo();
+    showGithubForm(false);
     showUserList();
   } else {
-    showInfo(data);
+    showProjectInfo(data);
+    showMountInfo(data);
     showGithubForm(false);
     showUserList(data);
   }
@@ -179,13 +206,13 @@ async function addUser(evt) {
     alert('please specify user label');
     return;
   }
-  if (user.indexOf('/') >= 0) {
-    alert('user label must not have \'/\'');
+  if (user.indexOf(':') >= 0) {
+    alert('user label must not have \':\'');
     return;
   }
   const url = new URL(evt.target.dataset.url);
   const state = url.searchParams.get('state');
-  url.searchParams.set('state', `${state}/${user}`);
+  url.searchParams.set('state', `${state}:${user}`);
   window.location.href = url.href;
 }
 
@@ -202,8 +229,16 @@ async function init() {
     }
   } else {
     showGithubForm(true);
-    showInfo();
+    showProjectInfo();
+    showMountInfo();
     showError();
+  }
+}
+
+function dataButtonClick(evt) {
+  const { href } = evt.target.dataset;
+  if (href) {
+    window.location.href = href;
   }
 }
 
@@ -211,6 +246,8 @@ function registerHandlers() {
   document.getElementById('btn-connect').addEventListener('click', githubForm);
   document.getElementById('btn-add-user').addEventListener('click', addUser);
   document.getElementById('btn-disconnect').addEventListener('click', disconnect);
+  document.getElementById('btn-login').addEventListener('click', dataButtonClick);
+  document.getElementById('btn-logout').addEventListener('click', dataButtonClick);
   window.addEventListener('popstate', init);
 }
 

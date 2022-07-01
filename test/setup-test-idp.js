@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Adobe. All rights reserved.
+ * Copyright 2021 Adobe. All rights reserved.
  * This file is licensed to you under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License. You may obtain a copy
  * of the License at http://www.apache.org/licenses/LICENSE-2.0
@@ -9,24 +9,9 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
+import idpFakeTestIDP from './fixtures/test-idp.js';
+import { IDPS } from '../src/login.js';
 
-module.exports = {
-  root: true,
-  extends: '@adobe/helix',
-  env: {
-    node: true,
-    es6: true,
-    es2022: true,
-  },
-  parserOptions: {
-    sourceType: 'module',
-    ecmaVersion: 2022,
-  },
-  rules: {
-    'import/extensions': 0,
-    'import/prefer-default-export': 0,
-  },
-  globals: {
-    __rootdir: true,
-  },
-};
+IDPS.test = idpFakeTestIDP;
+
+await idpFakeTestIDP.discovery();

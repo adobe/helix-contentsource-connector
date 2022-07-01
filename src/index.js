@@ -15,7 +15,7 @@ import { resolve } from 'path';
 import ejs from 'ejs';
 import mime from 'mime';
 import {
-  MemCachePlugin, OneDriveAuth, FSCacheManager, S3CacheManager,
+  MemCachePlugin, OneDriveAuth, FSCacheManager, S3CacheManager, OneDrive,
 } from '@adobe/helix-onedrive-support';
 import { GoogleClient } from '@adobe/helix-google-support';
 import { google } from 'googleapis';
@@ -24,8 +24,12 @@ import bodyData from '@adobe/helix-shared-body-data';
 import { logger } from '@adobe/helix-universal-logger';
 import { wrap as status } from '@adobe/helix-status';
 import { Response } from '@adobe/helix-fetch';
+import { decodeJwt, UnsecuredJWT } from 'jose';
 import pkgJson from './package.cjs';
 import fetchFstab from './fetch-fstab.js';
+import {
+  exchangeToken, getAuthInfoFromCookie, IDPS, logout, redirectToLogin,
+} from './login.js';
 
 const ROOT_PATH = '/register';
 
@@ -34,6 +38,8 @@ const AZURE_SCOPES = [
   'openid',
   'profile',
   'offline_access',
+  'Files.ReadWrite.All',
+  'Sites.ReadWrite.All',
 ];
 
 const GOOGLE_SCOPES = [
@@ -167,14 +173,15 @@ async function getProjectInfo(request, ctx, { owner, repo, user }) {
       contentBusId = 'default';
       mp = {
         type: 'onedrive',
-        url: 'https://adobe.sharepoint.com/',
+        url: 'https://adobe.sharepoint.com/sites/cg-helix/Shared%20Documents',
       };
     } else if (owner === 'default' && repo === 'google') {
       // workaround to register default onedrive user
       contentBusId = 'default';
       mp = {
         type: 'google',
-        url: 'https://adobe.sharepoint.com/',
+        url: 'https://drive.google.com/drive/u/3/folders/18G2V_SZflhaBrSo_0fMYqhGaEF9Vetkz',
+        id: '18G2V_SZflhaBrSo_0fMYqhGaEF9Vetkz',
       };
     } else {
       try {
@@ -222,11 +229,16 @@ async function getProjectInfo(request, ctx, { owner, repo, user }) {
     tenantId: '',
     error,
     version: pkgJson.version,
+    profile: null, // profile of connected user
+    authInfo: null, // profile of signed in user
     links: {
       helixHome: 'https://www.hlx.live/',
       disconnect: getRedirectUrl(request, ctx, '/disconnect'),
       connect: getRedirectUrl(request, ctx, '/connect'),
       info: getRedirectUrl(request, ctx, '/info'),
+      token: getRedirectUrl(request, ctx, '/token'),
+      login: getRedirectUrl(request, ctx, '/login'),
+      logout: getRedirectUrl(request, ctx, '/logout'),
       root: getRedirectUrl(request, ctx, '/'),
       scripts: getRedirectUrl(request, ctx, '/scripts.js'),
       styles: getRedirectUrl(request, ctx, '/styles.css'),
@@ -245,6 +257,68 @@ async function serveStatic(path) {
       'content-type': mime.getType(path),
     },
   });
+}
+
+/**
+ * Tests if the `authInfo` user has access to the share url.
+ * we might want to check for the `/.helix/config.xlsx` in the future
+ * @param ctx
+ * @param info
+ * @returns {Promise<string>}
+ */
+async function authorizeAccess(ctx, info) {
+  const { log, env } = ctx;
+  if (info.mp.type === 'google') {
+    const gc = await new GoogleClient({
+      log,
+      clientId: env.GOOGLE_DOCS2MD_CLIENT_ID,
+      clientSecret: env.GOOGLE_DOCS2MD_CLIENT_SECRET,
+    }).init();
+    await gc.setCredentials({
+      scope: GOOGLE_SCOPES.join(' '),
+      access_token: info.authInfo.accessToken,
+    });
+    try {
+      const ancestors = await gc.getItemsFromId(info.mp.id, []);
+      if (ancestors.length > 0) {
+        log.info(`access validated. user can access ${ancestors[0].id}`);
+        return '';
+      }
+      return 'Unable to validate access: Sharelink invalid or not authorized.';
+    } catch (e) {
+      log.warn('unable to resolve sharelink', e);
+      return `Unable to validate access: ${e.message}`;
+    }
+  } else {
+    const {
+      AZURE_WORD2MD_CLIENT_ID: clientId,
+      AZURE_WORD2MD_CLIENT_SECRET: clientSecret,
+    } = env;
+    const auth = new OneDriveAuth({
+      log,
+      clientId,
+      clientSecret,
+      tenant: info.tenantId,
+    });
+    auth.setAccessToken(info.authInfo.accessToken);
+    const od = new OneDrive({
+      auth,
+      noShareLinkCache: true,
+    });
+
+    try {
+      const root = await od.resolveShareLink(info.mp.url);
+      log.info(`access validated. user can access ${root.webUrl}`);
+    } catch (e) {
+      log.warn('unable to resolve sharelink', e);
+      if (e.details.code === 'accessDenied') {
+        return `Not authorized to access underlying data source. Please make sure that the enterprise application: "Helix Service (${clientId})" is consented for the required scopes.`;
+      } else {
+        return `Unable to validate access: ${e.message}`;
+      }
+    }
+    return '';
+  }
 }
 
 /**
@@ -269,30 +343,65 @@ async function run(request, context) {
 
   const [, route, owner, repo, user] = path.split('/');
 
+  /* ------------ login ------------------ */
+  if (route === 'login' && owner && repo) {
+    const info = await getProjectInfo(request, context, {
+      owner,
+      repo,
+      user,
+    });
+    // init tenantId for onedrive
+    if (info.mp.type === 'onedrive') {
+      await getOneDriveClient(context, info);
+    }
+    if (!info.error) {
+      return redirectToLogin(context, info, IDPS[info.mp.type]);
+    }
+  }
+
+  /* ------------ logout ------------------ */
+  if (route === 'logout') {
+    const info = await getProjectInfo(request, context, {
+      owner,
+      repo,
+      user,
+    });
+    return logout(context, info);
+  }
+
   /* ------------ token ------------------ */
   if (route === 'token') {
-    const { code, state } = data;
-    const [type, own, rep, usr] = state.split('/');
+    // this is a hack
+    const [state, usr] = (data.state || '').split(':');
+    data.state = decodeJwt(state);
+    data.state.user = usr;
+    const { code } = data;
+    const {
+      type, idp, owner: own, repo: rep, tid,
+    } = data.state;
 
     const info = await getProjectInfo(request, context, {
       owner: own,
       repo: rep,
       user: usr,
     });
+    info.tenantId = tid;
     if (!info.error) {
       try {
-        if (type === 'a') {
+        if (type === 'connect' && idp === 'onedrive') {
           const od = await getOneDriveClient(context, info);
           await od.app.acquireTokenByCode({
             code,
             scopes: AZURE_SCOPES,
             redirectUri: getRedirectUrl(request, context, '/token'),
           });
-        } else if (type === 'g') {
+        } else if (type === 'connect' && idp === 'google') {
           const oauth2Client = await getGoogleClient(request, context, info);
           await oauth2Client.getToken(code);
+        } else if (type === 'login') {
+          return exchangeToken(context, info, IDPS[idp]);
         } else {
-          throw new Error(`illegal type: ${type}`);
+          throw new Error(`illegal type: ${idp}`);
         }
 
         return new Response('', {
@@ -350,13 +459,34 @@ async function run(request, context) {
       repo,
       user,
     });
-    if (!info.error) {
+    info.authInfo = await getAuthInfoFromCookie(request, context, info);
+    if (!info.authInfo) {
+      delete info.mp;
+      delete info.contentBusId;
+    } else {
+      info.error = await authorizeAccess(context, info);
+      delete info.accessToken;
+      if (info.error) {
+        delete info.mp;
+        delete info.contentBusId;
+      }
+    }
+
+    if (!info.error && info.authInfo) {
       try {
         const cacheKeys = await info.cacheManager.listCacheKeys();
         info.users = cacheKeys.map((name) => ({
           name,
           url: getRedirectUrl(request, context, `/connect/${owner}/${repo}/${name}`),
         }));
+
+        const state = new UnsecuredJWT({
+          type: 'connect',
+          idp: info.mp.type,
+          owner,
+          repo,
+        }).encode();
+
         if (info.mp.type === 'onedrive') {
           const od = await getOneDriveClient(context, info);
           // get url to sign user in and consent to scopes needed for application
@@ -365,7 +495,7 @@ async function run(request, context) {
             redirectUri: getRedirectUrl(request, context, '/token'),
             responseMode: 'form_post',
             prompt: 'consent',
-            state: `a/${owner}/${repo}`,
+            state,
           });
           if (user) {
             // check for token
@@ -389,7 +519,7 @@ async function run(request, context) {
             scope: GOOGLE_SCOPES,
             access_type: 'offline',
             prompt: 'consent',
-            state: `g/${owner}/${repo}`,
+            state,
           });
           if (user) {
             try {
