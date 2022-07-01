@@ -1,3 +1,17 @@
+## [1.0.76](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.75...v1.0.76) (2022-06-29)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-universal-logger to v2.0.10 ([cae2342](https://github.com/adobe/helix-contentsource-connector/commit/cae23427c1110fb2521d0e269756b33d36560788))
+
+## [1.0.75](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.74...v1.0.75) (2022-06-28)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @adobe/helix-fetch to v3.1.0 ([2994119](https://github.com/adobe/helix-contentsource-connector/commit/29941199aefd8e0130f131ad3386438ceb164a7b))
+
 ## [1.0.74](https://github.com/adobe/helix-contentsource-connector/compare/v1.0.73...v1.0.74) (2022-06-25)
 
 
