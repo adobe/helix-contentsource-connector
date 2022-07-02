@@ -32,11 +32,20 @@ function showLoading(show) {
   }
 }
 
+function showStartOver(show) {
+  if (show) {
+    document.getElementById('start-over').classList.remove('hidden');
+  } else {
+    document.getElementById('start-over').classList.add('hidden');
+  }
+}
+
 function showLoginLogout(data) {
   if (data?.authInfo) {
     document.getElementById('logout').classList.remove('hidden');
     document.getElementById('login').classList.add('hidden');
-    document.getElementById('login-name').textContent = `${data.authInfo.name} <${data.authInfo.email || data.authInfo.preferred_username}>`;
+    document.getElementById('login-name').textContent = data.authInfo.name;
+    document.getElementById('login-email').textContent = data.authInfo.email || data.authInfo.preferred_username;
   } else {
     document.getElementById('login').classList.remove('hidden');
     document.getElementById('logout').classList.add('hidden');
@@ -156,11 +165,13 @@ async function loadInfo(owner, repo, user) {
     showMountInfo();
     showGithubForm(false);
     showUserList();
+    showStartOver(true);
   } else {
     showProjectInfo(data);
     showMountInfo(data);
     showGithubForm(false);
     showUserList(data);
+    showStartOver(true);
   }
   return false;
 }
@@ -189,7 +200,8 @@ async function disconnect(evt) {
   }
 }
 
-async function githubForm() {
+async function githubForm(evt) {
+  evt.preventDefault();
   const url = new URL(document.getElementById('github-url').value);
   const [, owner, repo] = url.pathname.split('/');
   showLoading(true);
@@ -244,6 +256,7 @@ function dataButtonClick(evt) {
 
 function registerHandlers() {
   document.getElementById('btn-connect').addEventListener('click', githubForm);
+  document.getElementById('github-form-form').addEventListener('submit', githubForm);
   document.getElementById('btn-add-user').addEventListener('click', addUser);
   document.getElementById('btn-disconnect').addEventListener('click', disconnect);
   document.getElementById('btn-login').addEventListener('click', dataButtonClick);

@@ -10,26 +10,24 @@
     <hr>
 </div>
 <div id="logout" class="hidden">
-    <p><span id="login-name"></span>&nbsp;<button id="btn-logout">sign out</button></p>
+    <p><strong id="login-name"></strong> &lt;<span id="login-email"></span>&gt;
+        <button id="btn-logout">sign out</button>
+    </p>
     <hr>
 </div>
 
 <div id="project-info" class="hidden">
     <h2 id="info-title"></h2>
-    <p>
-        github: <a id="info-github" href=""></a>
-    </p>
+    <div class="property-list">
+        <span>github:</span><a id="info-github" href=""></a>
+    </div>
 </div>
-<div id="mount-info" class="hidden">
-    <p>
-        content: <a id="info-mp" href=""></a>
-    </p>
-    <p>
-        contentBusId: <code id="info-contentBusId"></code>
-    </p>
-    <p>
-        tenantId: <code id="info-tenantId"></code>
-    </p>
+
+<div id="mount-info" class="property-list hidden">
+    <span>content:</span><a id="info-mp" href=""></a>
+    <span>contentBusId</span><code id="info-contentBusId"></code>
+    <span>tenantId</span><code id="info-tenantId"></code>
+    <hr>
 </div>
 
 <div id="loading" class="hidden">
@@ -39,14 +37,17 @@
 </div>
 
 <div id="github-form" class="hidden">
-    <p>
-        Enter github url: <input name="github" id="github-url" type="url" size="60">
+    <form id="github-form-form">
+        <label for="github-url">Enter github url:</label>
+        <input name="github" id="github-url" type="url" size="60">
+    </form>
+    <p class="button-container">
         <button id="btn-connect">ok</button>
     </p>
 </div>
 
 <div id="user-list-panel" class="hidden">
-    <h2>User List</h2>
+    <h3>User List</h3>
     <ul id="user-list">
         <li id="add-user">
             <select name="user" id="user-name">
@@ -57,18 +58,12 @@
             <button id="btn-add-user">....</button>
         </li>
     </ul>
-    <div id="connected-user">
-        <p>
-            Connected user <strong><span id="me-displayName"></span> &lt;<a id="me-mail" href=""></a>&gt;</strong>
-            <button id="btn-disconnect">disconnect</button>
-        </p>
-        <p>Scopes: <code id="info-scopes"></code></p>
-        <p>IDP: <code id="info-idp"></code></p>
-        <p>issuer: <code id="info-issuer"></code></p>
+    <div id="connected-user" class="property-list">
+        <span>user</span><span><strong id="me-displayName"></strong> &lt;<span id="me-mail"></span>&gt;&nbsp;<button id="btn-disconnect">disconnect</button></span>
+        <span>scopes:</span><code id="info-scopes"></code>
+        <span>IDP:</span><code id="info-idp"></code>
+        <span>issuer:</span><code id="info-issuer"></code>
     </div>
-    <p>
-        <a href="<%= links.root %>">start over</a>
-    </p>
 </div>
 
 <a id="link-connect" href="<%= links.connect %>"></a>
