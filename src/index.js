@@ -121,12 +121,8 @@ async function getOneDriveClient(context, opts) {
       cachePlugin,
     });
 
-    // init tenant via mountpoint url
-    if (opts.mp.tenantId) {
-      context.od.tenant = opts.mp.tenantId;
-    } else {
-      await context.od.initTenantFromUrl(opts.mp.url);
-    }
+    // init tenant via mount point
+    await context.od.initTenantFromMountPoint(opts.mp);
   }
 
   // this is a bit a hack
