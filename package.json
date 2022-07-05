@@ -56,7 +56,7 @@
   "dependencies": {
     "@adobe/helix-fetch": "3.1.1",
     "@adobe/helix-google-support": "1.4.17",
-    "@adobe/helix-onedrive-support": "8.0.12",
+    "@adobe/helix-onedrive-support": "8.1.0",
     "@adobe/helix-shared-body-data": "1.1.19",
     "@adobe/helix-shared-config": "8.2.0",
     "@adobe/helix-shared-utils": "2.0.11",
