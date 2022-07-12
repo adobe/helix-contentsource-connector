@@ -55,7 +55,7 @@
   "homepage": "https://github.com/adobe/helix-contentsource-connector#readme",
   "dependencies": {
     "@adobe/helix-fetch": "3.1.1",
-    "@adobe/helix-google-support": "1.4.19",
+    "@adobe/helix-google-support": "1.5.0",
     "@adobe/helix-onedrive-support": "8.1.1",
     "@adobe/helix-shared-body-data": "1.1.19",
     "@adobe/helix-shared-config": "8.2.0",
